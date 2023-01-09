@@ -401,6 +401,7 @@ define_rule_mapping!(
     N818 => violations::ErrorSuffixOnExceptionName,
     // isort
     I001 => violations::UnsortedImports,
+    I002 => violations::MissingRequiredImport,
     // eradicate
     ERA001 => violations::CommentedOutCode,
     // flake8-bandit
@@ -786,7 +787,7 @@ impl RuleCode {
             | RuleCode::RUF002
             | RuleCode::RUF003 => &LintSource::Tokens,
             RuleCode::E902 => &LintSource::FileSystem,
-            RuleCode::I001 => &LintSource::Imports,
+            RuleCode::I001 | RuleCode::I002 => &LintSource::Imports,
             _ => &LintSource::AST,
         }
     }
@@ -994,6 +995,7 @@ impl RuleCode {
             RuleCode::FBT003 => RuleOrigin::Flake8BooleanTrap,
             // isort
             RuleCode::I001 => RuleOrigin::Isort,
+            RuleCode::I002 => RuleOrigin::Isort,
             // flake8-import-conventions
             RuleCode::ICN001 => RuleOrigin::Flake8ImportConventions,
             // flake8-implicit-str-concat
