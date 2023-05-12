@@ -37,40 +37,14 @@ if version_info > (3,):
 else:
     2
 
-if True:
-    print(1)
-elif sys.version_info < (3,0):
-    print(2)
-else:
-    print(3)
-
-if True:
-    print(1)
-elif sys.version_info > (3,):
-    print(3)
-else:
-    print(2)
-
-if True:
-    print(1)
-elif sys.version_info > (3,):
-    print(3)
+print(1)
+print(1)
+print(1)
 
 def f():
-    if True:
-        print(1)
-    elif sys.version_info > (3,):
-        print(3)
-
-if True:
     print(1)
-elif sys.version_info < (3,0):
-    print(2)
-else:
-    print(3)
+
+print(1)
 
 def f():
-    if True:
-        print(1)
-    elif sys.version_info > (3,):
-        print(3)
+    print(1)

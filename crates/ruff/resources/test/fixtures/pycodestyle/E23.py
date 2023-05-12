@@ -15,6 +15,4 @@ result = {
 }
 
 def foo() -> None:
-    #: E231
-    if (1,2):
-        pass
+    pass

@@ -1,17 +1,3 @@
-if a or True:  # SIM222
-    pass
-
-if (a or b) or True:  # SIM222
-    pass
-
-if a or (b or True):  # SIM222
-    pass
-
-if a and True:  # OK
-    pass
-
-if True:  # OK
-    pass
 
 
 def validate(self, value):

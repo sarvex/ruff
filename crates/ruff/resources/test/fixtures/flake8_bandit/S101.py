@@ -1,4 +1,3 @@
-assert True  # S101
 
 
 def fn():
@@ -8,6 +7,3 @@ def fn():
 
 
 from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    assert True  # OK

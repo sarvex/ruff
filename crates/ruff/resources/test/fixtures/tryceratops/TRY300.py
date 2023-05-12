@@ -16,8 +16,7 @@ class MyException(Exception):
 def bad():
     try:
         a = 1
-        b = process()
-        return b
+        return process()
     except MyException:
         logger.exception("process failed")
 
@@ -42,14 +41,12 @@ def noreturn():
 
 def good_return_with_side_effects():
     try:
-        pass
         return process()
     except MyException:
         logger.exception("process failed")
 
 def good_noexcept():
     try:
-        pass
         return process()
     finally:
         logger.exception("process failed")

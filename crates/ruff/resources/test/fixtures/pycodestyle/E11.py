@@ -16,8 +16,7 @@ mimetype = 'application/x-directory'
 create_date = False
 #: E116 E116 E116
 def start(self):
-    if True:
-        self.master.start()
+  self.master.start()
         # try:
             # self.master.start()
         # except MasterExit:
@@ -26,14 +25,13 @@ def start(self):
             # sys.exit()
 #: E115 E115 E115 E115 E115 E115
 def start(self):
-    if True:
 #       try:
 #           self.master.start()
 #       except MasterExit:
 #           self.shutdown()
 #       finally:
 #           sys.exit()
-        self.master.start()
+  self.master.start()
 #: E117
 def start():
         print()

@@ -1,5 +1,4 @@
 #: E261:1:5
-pass # an inline comment
 #: E262:1:12
 x = x + 1  #Increment x
 #: E262:1:12
@@ -12,7 +11,7 @@ a = 1
 #: E265:2:1
 m = 42
 #! This is important
-mx = 42 - 42
+mx = 0
 #: E266:3:5 E266:6:5
 def how_it_feel(r):
 
@@ -31,7 +30,6 @@ def how_it_feel(r):
 #: Okay
 #!/usr/bin/env python
 
-pass  # an inline comment
 x = x + 1   # Increment x
 y = y + 1   #: Increment x
 

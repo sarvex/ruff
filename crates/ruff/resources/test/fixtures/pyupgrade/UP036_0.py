@@ -6,21 +6,17 @@ else:
     print("py3")
 
 if sys.version_info < (3,0):
-    if True:
-        print("py2!")
-    else:
-        print("???")
+    print("py2!")
 else:
     print("py3")
 
 if sys.version_info < (3,0): print("PY2!")
 else: print("PY3!")
 
-if True:
-    if sys.version_info < (3,0):
-        print("PY2")
-    else:
-        print("PY3")
+if sys.version_info < (3,0):
+    print("PY2")
+else:
+    print("PY3")
 
 if sys.version_info < (3,0): print(1 if True else 3)
 else:
@@ -58,11 +54,10 @@ if sys.version_info > (3,):
 else:
     print("py2")
 
-if True:
-    if sys.version_info > (3,):
-        print("py3")
-    else:
-        print("py2")
+if sys.version_info > (3,):
+    print("py3")
+else:
+    print("py2")
 
 if sys.version_info < (3,):
     print("py2")
@@ -84,20 +79,19 @@ class C:
         pass
 
     if sys.version_info < (3,0):
-        def f(py2):
+        def f(self):
             pass
     else:
-        def f(py3):
+        def f(self):
             pass
 
     def h():
         pass
 
-if True:
-    if sys.version_info < (3,0):
-        2
-    else:
-        3
+if sys.version_info < (3,0):
+    2
+else:
+    3
 
     # comment
 

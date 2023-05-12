@@ -1,1 +1,1 @@
-_("{}".format("line"))
+_('line')

@@ -57,10 +57,13 @@ class C:
 
 
 def foo(list_a, list_b):
-    results = (
+    return (
         User.query.filter(User.foo == "bar")
         .filter(  # Because foo.
-            db.or_(User.field_a.astext.in_(list_a), User.field_b.astext.in_(list_b))
+            db.or_(
+                User.field_a.astext.in_(list_a),
+                User.field_b.astext.in_(list_b),
+            )
         )
         .filter(User.xyz.is_(None))
         # Another comment about the filtering on is_quux goes here.
@@ -69,7 +72,6 @@ def foo(list_a, list_b):
         .with_for_update(key_share=True)
         .all()
     )
-    return results
 
 
 def foo2(list_a, list_b):

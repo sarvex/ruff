@@ -119,9 +119,7 @@ def f20(
     ...
 
 
-def f21(
-    x=3j - 3j,  # OK
-) -> None:
+def f21(x=0j) -> None:
     ...
 
 

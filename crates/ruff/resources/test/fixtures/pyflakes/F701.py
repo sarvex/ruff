@@ -10,7 +10,7 @@ while i < 10:
 
 
 def f():
-    for i in range(10):
+    for _ in range(10):
         break
 
     break

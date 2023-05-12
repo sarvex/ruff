@@ -10,5 +10,5 @@ except ZeroDivisionError and ValueError as e:  # [binary-op-exception]
 
 try:
     pass
-except (ValueError, Exception, IOError):
+except (Exception, IOError):
     pass

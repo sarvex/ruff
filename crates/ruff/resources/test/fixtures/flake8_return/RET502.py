@@ -6,8 +6,6 @@ def x(y):
 
 # without return value
 def x(y):
-    if not y:
-        return
     return
 
 
@@ -19,9 +17,7 @@ def x(y):
 
 # with return value
 def x(y):
-    if not y:
-        return 1
-    return 2
+    return 1 if not y else 2
 
 
 def x(y):

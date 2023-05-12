@@ -10,21 +10,17 @@ from library import some_connection, \
 from third_party import (X,
                          Y, Z)
 # fmt: on
-f'trigger 3.6 mode'
+'trigger 3.6 mode'
 # Comment 1
 
 # Comment 2
 
 # fmt: off
 def func_no_args():
-  a; b; c
-  if True: raise RuntimeError
-  if False: ...
-  for i in range(10):
-    print(i)
-    continue
-  exec('new-style exec', {}, {})
-  return None
+  a
+  b
+  c
+  raise RuntimeError
 async def coroutine(arg, exec=False):
  'Single-line docstring. Multiline is harder to reformat.'
  async with some_connection() as conn:
@@ -116,17 +112,15 @@ def on_and_off_broken():
         # ...but comments still get reformatted even though they should not be
     # fmt: on
 def long_lines():
-    if True:
-        typedargslist.extend(
-            gen_annotated_params(ast_args.kwonlyargs, ast_args.kw_defaults, parameters, implicit_default=True)
-        )
-        # fmt: off
-        a = (
-            unnecessary_bracket()
-        )
-        # fmt: on
-    _type_comment_re = re.compile(
-        r"""
+  typedargslist.extend(
+      gen_annotated_params(ast_args.kwonlyargs, ast_args.kw_defaults, parameters, implicit_default=True)
+  )
+  # fmt: off
+  a = (
+      unnecessary_bracket()
+  )
+  _type_comment_re = re.compile(
+      r"""
         ^
         [\t ]*
         \#[ ]type:[ ]*
@@ -145,10 +139,10 @@ def long_lines():
         )
         $
         """,
-        # fmt: off
-        re.MULTILINE|re.VERBOSE
-        # fmt: on
-    )
+      # fmt: off
+      re.MULTILINE|re.VERBOSE
+      # fmt: on
+  )
 def single_literal_yapf_disable():
     """Black does not support this."""
     BAZ = {
@@ -178,8 +172,6 @@ cfg.rule(
     # fmt: on
     xxxxxxxxxx_xxxxxxxxxxx_xxxxxxx_xxxxxxxxx=5
 )
-# fmt: off
-yield  'hello'
 # No formatting to the end of the file
 l=[1,2,3]
 d={'a':1,

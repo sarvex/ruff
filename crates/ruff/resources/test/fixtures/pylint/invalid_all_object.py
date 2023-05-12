@@ -4,7 +4,7 @@ __all__ = (
     Worm,
 )
 
-__all__ = list([None, "Fruit", "Worm"])  # [invalid-all-object]
+__all__ = [None, "Fruit", "Worm"]
 
 
 class Fruit:

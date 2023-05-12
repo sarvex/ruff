@@ -15,8 +15,8 @@ slice[lambda: None : lambda: None]
 slice[lambda x, y, *args, really=2, **kwargs: None :, None::]
 slice[1 or 2 : True and False]
 slice[not so_simple : 1 < val <= 10]
-slice[(1 for i in range(42)) : x]
-slice[:: [i for i in range(42)]]
+slice[(1 for _ in range(42)):x]
+slice[::list(range(42))]
 
 
 async def f():

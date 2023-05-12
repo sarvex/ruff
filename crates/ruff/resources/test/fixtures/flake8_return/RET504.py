@@ -2,17 +2,13 @@
 # Errors
 ###
 def x():
-    a = 1
-    return a  # RET504
+    return 1
 
 
 # Can be refactored false positives
 # https://github.com/afonasev/flake8-return/issues/47#issuecomment-1122571066
 def get_bar_if_exists(obj):
-    result = ""
-    if hasattr(obj, "bar"):
-        result = str(obj.bar)
-    return result
+    return str(obj.bar) if hasattr(obj, "bar") else ""
 
 
 # https://github.com/afonasev/flake8-return/issues/47#issue-641117366
@@ -56,21 +52,17 @@ def x():
     a = 1
     if y:
         return a
-    a = a + 2
+    a += 2
     print(a)
     return a
 
 
 def x():
-    a = {}
-    a["b"] = 2
-    return a
+    return {"b": 2}
 
 
 def x():
-    a = []
-    a.append(2)
-    return a
+    return [2]
 
 
 def x():
@@ -97,7 +89,7 @@ def x():
     i = 5
     while i:
         val = val + str(i)
-        i = i - x
+        i -= x
     return val
 
 
@@ -116,9 +108,8 @@ def x():
 
 # Considered OK, since functions can have side effects.
 def x():
-    a = 1
     print()
-    return a
+    return 1
 
 
 # Considered OK, since attribute assignments can have side effects.
@@ -132,8 +123,7 @@ class X:
 # Test cases for using value for assignment then returning it
 # See:https://github.com/afonasev/flake8-return/issues/47
 def resolve_from_url(self, url: str) -> dict:
-    local_match = self.local_scope_re.match(url)
-    if local_match:
+    if local_match := self.local_scope_re.match(url):
         schema = get_schema(name=local_match.group(1))
         self.store[url] = schema
         return schema
@@ -246,8 +236,7 @@ def get_queryset():
 
 
 def get_queryset():
-    queryset = Model.filter(a=1)
-    return queryset  # RET504
+    return Model.filter(a=1)
 
 
 # Function arguments
@@ -255,20 +244,12 @@ def str_to_bool(val):
     if isinstance(val, bool):
         return val
     val = val.strip().lower()
-    if val in ("1", "true", "yes"):
-        return True
-
-    return False
+    return val in ("1", "true", "yes")
 
 
 def str_to_bool(val):
-    if isinstance(val, bool):
-        return val
-    val = 1
-    return val  # RET504
+    return val if isinstance(val, bool) else 1
 
 
 def str_to_bool(val):
-    if isinstance(val, bool):
-        return some_obj
-    return val
+    return some_obj if isinstance(val, bool) else val

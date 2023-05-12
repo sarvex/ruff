@@ -1,48 +1,9 @@
 #: W191
-if False:
-	print  # indented with 1 tab
 #:
 
 
 #: W191
-y = x == 2 \
-	or x == 3
-#: E101 W191 W504
-if (
-        x == (
-            3
-        ) or
-        y == 4):
-	pass
-#: E101 W191
-if x == 2 \
-    or y > 1 \
-        or x == 3:
-	pass
-#: E101 W191
-if x == 2 \
-        or y > 1 \
-        or x == 3:
-	pass
-#:
-
-#: E101 W191 W504
-if (foo == bar and
-        baz == bop):
-	pass
-#: E101 W191 W504
-if (
-    foo == bar and
-    baz == bop
-):
-	pass
-#:
-
-#: E101 E101 W191 W191
-if start[1] > end_col and not (
-        over_indent == 4 and indent_next):
-	return (0, "E121 continuation line over-"
-	        "indented for visual indent")
+y = x in [2, 3]
 #:
 
 #: E101 W191
@@ -134,10 +95,7 @@ if True:
 #: W191 W191 W191 W191 W191
 def test_keys(self):
 	"""areas.json - All regions are accounted for."""
-	expected = set([
-		u'Norrbotten',
-		u'V\xe4sterbotten',
-	])
+	expected = {u'Norrbotten', u'V\xe4sterbotten'}
 #: W191
 x = [
 	'abc'

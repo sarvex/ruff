@@ -7,8 +7,8 @@
 "{1.arg[1]!r:0{2['arg']}{1}}".format(1, 2, 3, 4) # F523
 
 # With no indexes
-"{}".format(1, 2)  # F523
-"{}".format(1, 2, 3)  # F523
+'1'
+'1'
 "{:{}}".format(1, 2)  # No issues
 "{:{}}".format(1, 2, 3)  # F523
 

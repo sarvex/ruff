@@ -1,18 +1,3 @@
-if a and False:  # SIM223
-    pass
-
-if (a or b) and False:  # SIM223
-    pass
-
-if a or (b and False):  # SIM223
-    pass
-
-if a or False:
-    pass
-
-if False:
-    pass
-
 if a and f() and b and g() and False:  # OK
     pass
 

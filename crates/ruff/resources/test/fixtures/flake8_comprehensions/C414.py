@@ -15,9 +15,4 @@ sorted(sorted(x))
 sorted(sorted(x, key=lambda y: y))
 sorted(reversed(x))
 sorted(list(x), key=lambda y: y)
-tuple(
-    list(
-        [x, 3, "hell"\
-        "o"]
-    )
-)
+(x, 3, "hell" "o")

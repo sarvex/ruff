@@ -10,7 +10,7 @@ def errors():
     if y is not "" or y != "":
         print("y is not an empty string")
 
-    if "" != z:
+    if z != "":
         print("z is an empty string")
 
 

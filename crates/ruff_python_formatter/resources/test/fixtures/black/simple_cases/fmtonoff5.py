@@ -37,28 +37,23 @@ def test_func():
 
 
 # Regression test for https://github.com/psf/black/issues/2567.
-if True:
-    # fmt: off
-    for _ in range( 1 ):
+# fmt: off
+for _ in range( 1 ):
     # fmt: on
-        print ( "This won't be formatted" )
-    print ( "This won't be formatted either" )
-else:
-    print ( "This will be formatted" )
+    print ( "This won't be formatted" )
+print ( "This won't be formatted either" )
 
 
 # Regression test for https://github.com/psf/black/issues/3184.
 class A:
-    async def call(param):
-        if param:
+    async def call(self):
+        if self:
             # fmt: off
-            if param[0:4] in (
-                "ABCD", "EFGH"
-            )  :
+            if self[:4] in ("ABCD", "EFGH"):
                 # fmt: on
                 print ( "This won't be formatted" )
 
-            elif param[0:4] in ("ZZZZ",):
+            elif self[:4] in ("ZZZZ",):
                 print ( "This won't be formatted either" )
 
         print ( "This will be formatted" )
@@ -77,8 +72,7 @@ class Factory(t.Protocol):
 
 # Regression test for https://github.com/psf/black/issues/3436.
 if x:
-    return x
-# fmt: off
+    pass
 elif   unformatted:
 # fmt: on
     will_be_formatted  ()

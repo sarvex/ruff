@@ -1,11 +1,9 @@
 import sys
 
-if sys.platform == "linus": ...  # OK
+if sys.platform in ["linus", "win32", "cygwin"]:
+    ...  # OK
+    ...  # OK
+elif sys.platform not in ["linux", "darwin"]:
+    ...  # OK
 
-if sys.platform != "linux": ...  # OK
-
-if sys.platform == "win32": ...  # OK
-
-if sys.platform != "darwin": ...  # OK
-
-if sys.platform == "cygwin": ...  # OK
+...  # OK

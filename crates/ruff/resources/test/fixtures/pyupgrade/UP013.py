@@ -40,4 +40,4 @@ MyType = TypedDict("MyType", {"a": int, "b": str, **c})
 MyType = TypedDict("MyType", {})
 
 # Empty dict call
-MyType = TypedDict("MyType", dict())
+MyType = TypedDict("MyType", {})

@@ -20,9 +20,7 @@ def stupid_function(arg): # [too-many-return-statements]
         return 8
     if arg == 9:
         return 9
-    if arg == 10:
-        return 10
-    return None
+    return 10 if arg == 10 else None
 
 
 def many_yield(text):

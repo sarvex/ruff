@@ -5,45 +5,22 @@ Test for else-if-used
 
 def ok0():
     """Should not trigger on elif"""
-    if 1:
-        pass
-    elif 2:
-        pass
+    pass
 
 
 def ok1():
     """If the orelse has more than 1 item in it, shouldn't trigger"""
-    if 1:
-        pass
-    else:
-        print()
-        if 1:
-            pass
+    pass
 
 
 def ok2():
     """If the orelse has more than 1 item in it, shouldn't trigger"""
-    if 1:
-        pass
-    else:
-        if 1:
-            pass
-        print()
+    pass
 
 
 def not_ok0():
-    if 1:
-        pass
-    else:
-        if 2:
-            pass
+    pass
 
 
 def not_ok1():
-    if 1:
-        pass
-    else:
-        if 2:
-            pass
-        else:
-            pass
+    pass

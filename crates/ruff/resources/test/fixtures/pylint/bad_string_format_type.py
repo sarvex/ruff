@@ -11,7 +11,7 @@ print("foo %(foo)d bar %(bar)d" % {"foo": "1", "bar": "2"})
 "%d" % []
 "%d" % ([],)
 "%(key)d" % {"key": []}
-print("%d" % ("%s" % ("nested",),))
+print("%d" % ('nested', ))
 "%d" % ((1, 2, 3),)
 
 # False negatives
@@ -23,15 +23,15 @@ VALUES_TO_FORMAT = (1, "2", 3.0)
 
 # OK
 "%d %s %f" % VALUES_TO_FORMAT
-"%s" % "1"
-"%s %s %s" % ("1", 2, 3.5)
+'1'
+'1 2 3.5'
 print("%d %d"
       %
 (1, 1.1))
-"%s" % 1
+'1'
 "%d" % 1
 "%f" % 1
-"%s" % 1
+'1'
 "%(key)s" % {"key": 1}
 "%d" % 1
 "%(key)d" % {"key": 1}
@@ -41,10 +41,10 @@ print("%d %d"
 "%(key)d" % {"key": 1.1}
 "%s" % []
 "%(key)s" % {"key": []}
-"%s" % None
+'None'
 "%(key)s" % {"key": None}
-print("%s" % ("%s" % ("nested",),))
-print("%s" % ("%d" % (5,),))
+print('nested')
+print(f'{"%d" % (5, )}')
 "%d %d" % "1"
 "%d" "%d" % "1"
 "-%f" % time.time()

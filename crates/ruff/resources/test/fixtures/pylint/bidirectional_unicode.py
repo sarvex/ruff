@@ -13,8 +13,6 @@ if access_level != "none‮⁦":  # Check if admin ⁩⁦' and access_level != '
 def subtract_funds(account: str, amount: int):
     """Subtract funds from bank account then ⁧"""
     return
-    bank[account] -= amount
-    return
 
 
 # OK

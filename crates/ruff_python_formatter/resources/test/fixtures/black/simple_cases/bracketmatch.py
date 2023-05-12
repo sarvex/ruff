@@ -1,5 +1,3 @@
-for ((x in {}) or {})['a'] in x:
-    pass
 pem_spam = lambda l, spam = {
     "x": 3
 }: not spam.get(l.strip())

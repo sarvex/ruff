@@ -13,12 +13,12 @@ for key in list(obj.keys()):
     if some_property(key):
         del obj[key]
 
-[k for k in obj.keys()]  # SIM118
+list(obj.keys())
 
-{k for k in obj.keys()}  # SIM118
+set(obj.keys())
 
 {k: k for k in obj.keys()}  # SIM118
 
-(k for k in obj.keys())  # SIM118
+iter(obj.keys())
 
 key in (obj or {}).keys()  # SIM118

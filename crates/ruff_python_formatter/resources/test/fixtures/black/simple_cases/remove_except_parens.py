@@ -9,7 +9,7 @@ except (AttributeError) as err:
 # we do not remove brackets to preserve AST.
 try:
     a.something
-except (AttributeError,) as err:
+except AttributeError as err:
     raise err
 
 # This is a tuple of exceptions. Do not remove brackets.
@@ -26,7 +26,7 @@ except (some.really.really.really.looooooooooooooooooooooooooooooooong.module.ov
 
 try:
     a.something
-except (some.really.really.really.looooooooooooooooooooooooooooooooong.module.over89.chars.Error,) as err:
+except some.really.really.really.looooooooooooooooooooooooooooooooong.module.over89.chars.Error as err:
     raise err
 
 try:

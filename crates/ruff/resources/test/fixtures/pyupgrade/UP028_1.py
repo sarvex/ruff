@@ -1,11 +1,11 @@
 # These should NOT change
 def f():
-    for x in z:
+    for _ in z:
         yield
 
 
 def f():
-    for x in z:
+    for _ in z:
         yield y
 
 
@@ -35,9 +35,8 @@ def f():
 
 
 def f():
-    for x in z:
-        x = 22
-        yield x
+    for _ in z:
+        yield 22
 
 
 def f():
@@ -48,8 +47,7 @@ def f():
 
 
 def f():
-    for x in range(5):
-        yield x
+    yield from range(5)
     print(x)
 
 
@@ -57,8 +55,7 @@ def f():
     def g():
         print(x)
 
-    for x in range(5):
-        yield x
+    yield from range(5)
     g()
 
 
@@ -69,14 +66,12 @@ def f():
 
         return h
 
-    for x in range(5):
-        yield x
+    yield from range(5)
     g()()
 
 
 def f(x):
-    for x in y:
-        yield x
+    yield from y
     del x
 
 
@@ -88,26 +83,21 @@ async def f():
 def f():
     x = 1
     print(x)
-    for x in y:
-        yield x
+    yield from y
 
 
 def f():
-    for x in y:
-        yield x
+    yield from y
     print(x)
 
 
 def f():
-    for x in y:
-        yield x
+    yield from y
     z = lambda: x
 
 
 def f():
-    for x in y:
-        yield x
-
+    yield from y
     class C:
         def __init__(self):
             print(x)

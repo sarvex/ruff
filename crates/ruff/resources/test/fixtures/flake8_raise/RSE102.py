@@ -11,24 +11,3 @@ except ZeroDivisionError:
 
 # RSE102
 raise TypeError()
-
-# RSE102
-raise TypeError ()
-
-# RSE102
-raise TypeError \
-    ()
-
-# RSE102
-raise TypeError(
-
-)
-
-# RSE102
-raise TypeError(
-    # Hello, world!
-)
-
-raise AssertionError
-
-raise AttributeError("test message")

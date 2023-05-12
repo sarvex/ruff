@@ -65,10 +65,6 @@ def i():
         finally:
             break  # warning
 
-            def j():
-                while True:
-                    break  # no warning
-
 
 def h():
     while True:
@@ -76,10 +72,6 @@ def h():
             pass
         finally:
             continue  # warning
-
-            def j():
-                while True:
-                    continue  # no warning
 
 
 def k():

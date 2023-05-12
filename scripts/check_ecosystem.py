@@ -273,7 +273,7 @@ async def main(*, ruff1: Path, ruff2: Path, projects_jsonl: Optional[Path]) -> N
                 print()
 
                 print("```")
-                print(str(diff))
+                print(diff)
                 print("```")
 
                 print()

@@ -9,17 +9,14 @@ while False:
 f = lambda: (yield 1)
 #: E731
 f = lambda: (yield from g())
-#: E731
 class F:
     f = lambda x: 2 * x
 
 
 f = object()
 f.method = lambda: "Method"
-f = {}
-f["a"] = lambda x: x**2
-f = []
-f.append(lambda x: x**2)
+f = {"a": lambda x: x**2}
+f = [lambda x: x**2]
 f = g = lambda x: x**2
 lambda: "no-op"
 
@@ -42,7 +39,6 @@ f: Callable[[str, int], tuple[str, int]] = lambda a, b: (a, b)
 f: Callable[[str, int, list[str]], list[str]] = lambda a, b, /, c: [*c, a * b]
 
 
-# Override `Callable`
 class Callable:
     pass
 

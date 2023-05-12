@@ -1,11 +1,11 @@
 class BazMeta(type):
     _private_count = 1
 
-    def __new__(mcs, name, bases, attrs):
-        if mcs._private_count <= 5:
-            mcs.some_method()
+    def __new__(cls, name, bases, attrs):
+        if cls._private_count <= 5:
+            cls.some_method()
 
-        return super().__new__(mcs, name, bases, attrs)
+        return super().__new__(cls, name, bases, attrs)
 
     def some_method():
         pass
@@ -40,9 +40,7 @@ class Foo(metaclass=BazMeta):
         if Foo._private_thing:
             return None
         Foo = Bar()
-        if Foo._private_thing:  # SLF001
-            return None
-        return self.bar
+        return None if Foo._private_thing else self.bar
 
     def public_func(self):
         super().public_func()

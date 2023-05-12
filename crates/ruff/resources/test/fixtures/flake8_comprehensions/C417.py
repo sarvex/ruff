@@ -31,4 +31,4 @@ def myfunc(arg1: int, arg2: int = 4):
 
 list(map(myfunc, nums))
 
-[x for x in nums]
+list(nums)

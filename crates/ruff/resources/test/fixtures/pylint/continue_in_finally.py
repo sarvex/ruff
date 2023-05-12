@@ -14,8 +14,6 @@ while True:
             pass
         finally:
             continue  # [continue-in-finally]
-        pass
-
 while True:
     try:
         pass
@@ -75,21 +73,10 @@ while True:
 
         def test():
             continue
-            while True:
-                continue
 
 
 while True:
     try:
         pass
     finally:
-        if True:
-            pass
-        elif False:
-            continue  # [continue-in-finally]
-        else:
-            continue  # [continue-in-finally]
-            for i in range(10):
-                pass
-            else:
-                continue  # [continue-in-finally]
+        pass

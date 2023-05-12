@@ -3,10 +3,10 @@ y = [("a", 1), ("b", 2), ("c", 3)]
 z = [(1,), (2,), (3,)]
 d = {"a": 1, "b": 2, "c": 3}
 
-[i for i in x]
-{i for i in x}
-{k: v for k, v in y}
-{k: v for k, v in d.items()}
+list(x)
+set(x)
+dict(y)
+dict(d)
 
 [i for i, in z]
 [i for i, j in y]

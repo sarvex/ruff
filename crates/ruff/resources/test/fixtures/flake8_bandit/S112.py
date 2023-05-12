@@ -10,12 +10,12 @@ except:
 
 try:
     pass
-except (Exception,):
+except Exception:
     continue
 
 try:
     pass
-except (Exception, ValueError):
+except Exception:
     continue
 
 try:
@@ -25,5 +25,5 @@ except ValueError:
 
 try:
     pass
-except (ValueError,):
+except ValueError:
     continue

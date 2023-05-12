@@ -47,8 +47,7 @@ for i in range(5):
 
 for i in range(5):
 
-    for j in range(7):
-
+    for _ in range(7):
         print(f"{i}) The lines above me should be removed!")
 
 
@@ -65,9 +64,8 @@ if random.randint(0, 3) == 0:
     print("The new lines above me is about to be removed!")
 
 
-if random.randint(0, 3) == 0:
-    if random.uniform(0, 1) > 0.5:
-        print("Two lines above me are about to be removed!")
+if random.randint(0, 3) == 0 and random.uniform(0, 1) > 0.5:
+    print("Two lines above me are about to be removed!")
 
 
 while True:

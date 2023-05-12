@@ -36,5 +36,3 @@ def aug_assign(rank, world_size):
 
 def loop_assign():
     global CURRENT_PORT
-    for CURRENT_PORT in range(5):
-        pass

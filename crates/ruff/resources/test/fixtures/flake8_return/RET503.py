@@ -118,11 +118,10 @@ def bar1(x, y, z):
 
 def bar3(x, y, z):
     for i in x:
-        if i > y:
-            if z:
-                break
-        else:
+        if i <= y:
             return z
+        if z:
+            break
         return None
 
 
@@ -135,11 +134,10 @@ def bar1(x, y, z):
 
 def bar3(x, y, z):
     for i in x:
-        if i < y:
-            if z:
-                continue
-        else:
+        if i >= y:
             return z
+        if z:
+            continue
         return None
 
 

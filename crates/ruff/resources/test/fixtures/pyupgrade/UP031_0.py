@@ -1,15 +1,15 @@
 a, b, x, y = 1, 2, 3, 4
 
 # UP031
-print('%s %s' % (a, b))
+print(f'{a} {b}')
 
-print('%s%s' % (a, b))
+print(f'{a}{b}')
 
-print("trivial" % ())
+print('trivial')
 
-print("%s" % ("simple",))
+print('simple')
 
-print("%s" % ("%s" % ("nested",),))
+print('nested')
 
 print("%s%% percent" % (15,))
 
@@ -29,13 +29,9 @@ print("%#o" % (123,))
 
 print("brace {} %s" % (1,))
 
-print(
-  "%s" % (
-    "trailing comma",
-        )
-)
+print('trailing comma')
 
-print("foo %s " % (x,))
+print(f"foo {x} ")
 
 print("%(k)s" % {"k": "v"})
 
@@ -72,11 +68,11 @@ print("%s \N{snowman}" % (a,))
 
 print("%(foo)s \N{snowman}" % {"foo": 1})
 
-print(("foo %s " "bar %s") % (x, y))
+print(f"foo {x} bar {y}")
 
 # Single-value expressions
-print('Hello %s' % "World")
-print('Hello %s' % f"World")
+print('Hello World')
+print(f'Hello World')
 print('Hello %s (%s)' % bar)
 print('Hello %s (%s)' % bar.baz)
 print('Hello %s (%s)' % bar['bop'])
@@ -95,10 +91,7 @@ print('Hello %(arg)s' % bar['bop'])
     "bar %(bar)s"
 ) % {"foo": x, "bar": y}
 
-(
-    """foo %s"""
-    % (x,)
-)
+f"""foo {x}"""
 
 (
     """

@@ -16,15 +16,15 @@ def test_error():
     assert something and not something_else
     assert something and (something_else or something_third)
     assert not something and something_else
-    assert not (something or something_else)
-    assert not (something or something_else or something_third)
+    assert not something and not something_else
+    assert not something and not something_else and not something_third
     assert something and something_else == """error
     message
     """
 
     # recursive case
-    assert not (a or not (b or c))
-    assert not (a or not (b and c))
+    assert not a and (b or c)
+    assert not a and (b and c)
 
     # detected, but no autofix for messages
     assert something and something_else, "error message"

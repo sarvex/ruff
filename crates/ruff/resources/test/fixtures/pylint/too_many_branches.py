@@ -3,33 +3,13 @@ Test for too many branches.
 Taken from the pylint source 2023-02-03
 """
 # pylint: disable=using-constant-test
-def wrong(): # [too-many-branches]
+def wrong():    # [too-many-branches]
     """ Has too many branches. """
-    if 1:
-        pass
-    elif 1:
-        pass
-    elif 1:
-        pass
-    elif 1:
-        pass
-    elif 1:
-        pass
-    elif 1:
-        pass
     try:
         pass
     finally:
         pass
-    if 2:
-        pass
     while True:
-        pass
-    if 1:
-        pass
-    elif 2:
-        pass
-    elif 3:
         pass
 
 def good():

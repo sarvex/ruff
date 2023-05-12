@@ -23,20 +23,15 @@ class SomeClass:
 
 
 def print_python_version():
-    if 2 * 2 == 4:
-        return
-    print(sys.version)
-
-
-def print_python_version():
-    if 2 * 2 == 4:
-        return None
     return
 
 
 def print_python_version():
-    if 2 * 2 == 4:
-        return None
+    return None
+
+
+def print_python_version():
+    return None
 
 
 def print_python_version():

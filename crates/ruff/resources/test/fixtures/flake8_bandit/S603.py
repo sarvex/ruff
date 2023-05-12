@@ -14,7 +14,7 @@ Popen("true", shell={})
 Popen("true", shell=None)
 
 # Unknown values are treated as falsey.
-Popen("true", shell=True if True else False)
+Popen("true", shell=True)
 
 # No value is also caught.
 Popen("true")

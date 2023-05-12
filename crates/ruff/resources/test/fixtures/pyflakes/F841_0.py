@@ -56,7 +56,7 @@ def f():
 
 def f():
     annotations = []
-    assert len([annotations for annotations in annotations])
+    assert len(list(annotations))
 
 
 def f():
@@ -90,10 +90,10 @@ def f():
 
 def f():
     exponential, base_multiplier = 1, 2
-    hash_map = {
-        (exponential := (exponential * base_multiplier) % 3): i + 1 for i in range(2)
+    return {
+        (exponential := (exponential * base_multiplier) % 3): i + 1
+        for i in range(2)
     }
-    return hash_map
 
 
 def f(x: int):

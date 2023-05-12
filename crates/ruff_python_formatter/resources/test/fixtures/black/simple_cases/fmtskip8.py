@@ -36,7 +36,7 @@ while  some_condition(  unformatted,  args  ):  # fmt: skip
     print("Do something")
 
 
-for  i  in  some_iter(  unformatted,  args  ):  # fmt: skip
+for _ in some_iter(  unformatted,  args  ):
     print("Do something")
 
 

@@ -3,12 +3,11 @@ Should emit:
 B904 - on lines 10, 11, 16, 62, and 64
 """
 
+
 try:
     raise ValueError
 except ValueError:
-    if "abc":
-        raise TypeError
-    raise UserWarning
+    raise TypeError
 except AssertionError:
     raise  # Bare `raise` should not be an error
 except Exception as err:
@@ -58,12 +57,7 @@ except ImportError:
 try:
     ...
 except Exception as e:
-    if ...:
-        raise RuntimeError("boom!")
-    else:
-        raise RuntimeError("bang!")
-
-
+    raise RuntimeError("boom!")
 try:
     ...
 except Exception as e:

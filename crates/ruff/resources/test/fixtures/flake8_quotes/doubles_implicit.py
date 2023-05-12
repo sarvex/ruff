@@ -22,6 +22,5 @@ x = (
     "fine"
 )
 
-if True:
-    "This can use 'double' quotes"
+"This can use 'double' quotes"
 "But this needs to be changed"

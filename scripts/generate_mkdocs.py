@@ -78,7 +78,7 @@ def clean_file_content(content: str, title: str) -> str:
     content = "\n".join(lines) + "\n"
 
     # Add a missing title.
-    return f"# {title}\n\n" + content
+    return f"# {title}\n\n{content}"
 
 
 def main() -> None:
@@ -92,7 +92,7 @@ def main() -> None:
     for src, dst in LINK_REWRITES.items():
         content = content.replace(f"({src})", f"({dst})")
     if m := re.search(r"\(https://beta.ruff.rs/docs/.*\)", content):
-        msg = f"Unexpected absolute link to documentation: {m.group(0)}"
+        msg = f"Unexpected absolute link to documentation: {m[0]}"
         raise ValueError(msg)
 
     Path("docs").mkdir(parents=True, exist_ok=True)

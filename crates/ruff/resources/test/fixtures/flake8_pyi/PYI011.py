@@ -102,10 +102,7 @@ def f20(
     x: int = 5
     + 5,  # OK
 ) -> None: ...
-def f21(
-    x: complex = 3j
-    - 3j,  # OK
-) -> None: ...
+def f21(x: complex = 0j) -> None: ...
 def f22(
     x: complex = -42.5j  # OK
     + 4.3j,

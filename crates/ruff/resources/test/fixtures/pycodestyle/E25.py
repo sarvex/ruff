@@ -23,8 +23,8 @@ foo(True,
     biz = 'foo'
     )
 #: Okay
-foo(bar=(1 == 1))
-foo(bar=(1 != 1))
+foo(bar=True)
+foo(bar=False)
 foo(bar=(1 >= 1))
 foo(bar=(1 <= 1))
 (options, args) = parser.parse_args()

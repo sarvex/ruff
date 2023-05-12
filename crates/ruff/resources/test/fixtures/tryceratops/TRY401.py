@@ -14,17 +14,14 @@ def main_function():
         handle()
         finish()
     except ValueError as bad:
-        if True is False:
-            for i in range(10):
-                logger.exception(f"Found an error: {bad} {good}")  # TRY401
+        pass
     except IndexError as bad:
         logger.exception(f"Found an error: {bad} {bad}")  # TRY401
     except Exception as bad:
         logger.exception(f"Found an error: {bad}")  # TRY401
         logger.exception(f"Found an error: {bad}")  # TRY401
 
-        if True:
-            logger.exception(f"Found an error: {bad}")  # TRY401
+        logger.exception(f"Found an error: {bad}")  # TRY401
 
 
 import logging
@@ -43,7 +40,7 @@ def func_concat():
     try:
         ...
     except Exception as ex:
-        logger.exception("Logging an error: " + str(ex))  # TRY401
+        logger.exception(f"Logging an error: {str(ex)}")
 
 
 def func_comma():

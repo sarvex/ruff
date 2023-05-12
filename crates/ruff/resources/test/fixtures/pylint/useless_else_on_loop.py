@@ -106,9 +106,7 @@ def test_break_in_orelse_deep3():
 def test_break_in_if_orelse():
     """should raise a useless-else-on-loop message due to break in else"""
     for _ in range(10):
-        if 1 < 2:  # pylint: disable=comparison-of-constants
-            pass
-        else:
+        if 1 >= 2:
             break
     else:
         return True

@@ -87,8 +87,7 @@ def main(*, name: str, prefix: str, code: str, linter: str) -> None:
         mod_contents.append(new_mod)
         mod_contents.sort()
 
-        new_contents = ";\n".join(pub_use_contents)
-        new_contents += "\n\n"
+        new_contents = ";\n".join(pub_use_contents) + "\n\n"
         new_contents += "\n".join(mod_contents)
         new_contents += "\n"
 

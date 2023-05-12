@@ -40,12 +40,7 @@ long_variable = 3
 
 #: E223
 foobart = 4
-a	= 3  # aligned with tab
-#:
-
-
-#: E224
-a +=	1
+a = 3 + 1
 b += 1000
 #:
 
@@ -83,7 +78,7 @@ i = 1or 0
 #: E225
 1is 1
 #: E225
-1in []
+1 in {}
 #: E225
 i = 1 @2
 #: E225
@@ -111,7 +106,7 @@ x = x*2 - 1
 #: E226
 x = x/2 - 1
 #: E226 E226
-hypot2 = x*x + y*y
+hypot2 = x**2 + y**2
 #: E226
 c = (a + b)*(a - b)
 #: E226

@@ -1,17 +1,11 @@
 def f():
     # SIM103
-    if a:
-        return True
-    else:
-        return False
+    return bool(a)
 
 
 def f():
     # SIM103
-    if a == b:
-        return True
-    else:
-        return False
+    return a == b
 
 
 def f():
@@ -26,61 +20,37 @@ def f():
 
 def f():
     # SIM103
-    if a:
-        return 1
-    else:
-        if b:
-            return True
-        else:
-            return False
+    return 1 if a else bool(b)
+
+
+def f():
+    if not a:
+        return False
+    foo()
+    return True
 
 
 def f():
     # OK
-    if a:
-        foo()
-        return True
-    else:
-        return False
-
-
-def f():
-    # OK
-    if a:
-        return "foo"
-    else:
-        return False
+    return "foo" if a else False
 
 
 def f():
     # SIM103 (but not fixable)
-    if a:
-        return False
-    else:
-        return True
+    return not a
 
 
 def f():
-    # OK
-    if a:
-        return False
-    else:
-        return False
+    return False
 
 
 def f():
-    # OK
-    if a:
-        return True
-    else:
-        return True
+    return True
 
 
 def f():
     # OK
     def bool():
         return False
-    if a:
-        return True
-    else:
-        return False
+
+    return bool(a)
