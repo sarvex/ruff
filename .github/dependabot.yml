@@ -9,3 +9,7 @@ updates:
       timezone: "America/New_York"
     commit-message:
       prefix: "ci(deps)"
+ - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "weekly"
