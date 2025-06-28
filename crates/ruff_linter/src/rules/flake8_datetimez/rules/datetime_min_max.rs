@@ -1,26 +1,26 @@
 use std::fmt::{Display, Formatter};
 
-use ruff_diagnostics::{Diagnostic, Violation};
-use ruff_macros::{derive_message_formats, ViolationMetadata};
+use ruff_macros::{ViolationMetadata, derive_message_formats};
 use ruff_python_ast::{Expr, ExprAttribute, ExprCall};
 use ruff_python_semantic::{Modules, SemanticModel};
 use ruff_text_size::Ranged;
 
+use crate::Violation;
 use crate::checkers::ast::Checker;
 
 /// ## What it does
-/// Checks for uses of `datetime.datetime.max` and `datetime.datetime.min`.
+/// Checks for uses of `datetime.datetime.min` and `datetime.datetime.max`.
 ///
 /// ## Why is this bad?
-/// `datetime.max` and `datetime.min` are non-timezone-aware datetime objects.
+/// `datetime.min` and `datetime.max` are non-timezone-aware datetime objects.
 ///
-/// As such, operations on `datetime.max` and `datetime.min` may behave
+/// As such, operations on `datetime.min` and `datetime.max` may behave
 /// unexpectedly, as in:
 ///
 /// ```python
 /// # Timezone: UTC-14
-/// datetime.max.timestamp()  # ValueError: year 10000 is out of range
 /// datetime.min.timestamp()  # ValueError: year 0 is out of range
+/// datetime.max.timestamp()  # ValueError: year 10000 is out of range
 /// ```
 ///
 /// ## Example
@@ -53,7 +53,7 @@ impl Violation for DatetimeMinMax {
 }
 
 /// DTZ901
-pub(crate) fn datetime_max_min(checker: &Checker, expr: &Expr) {
+pub(crate) fn datetime_min_max(checker: &Checker, expr: &Expr) {
     let semantic = checker.semantic();
 
     if !semantic.seen_module(Modules::DATETIME) {
@@ -74,7 +74,7 @@ pub(crate) fn datetime_max_min(checker: &Checker, expr: &Expr) {
         return;
     }
 
-    checker.report_diagnostic(Diagnostic::new(DatetimeMinMax { min_max }, expr.range()));
+    checker.report_diagnostic(DatetimeMinMax { min_max }, expr.range());
 }
 
 /// Check if the current expression has the pattern `foo.replace(tzinfo=bar)` or `foo.time()`.

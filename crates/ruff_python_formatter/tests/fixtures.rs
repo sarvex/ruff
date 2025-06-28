@@ -2,8 +2,8 @@ use crate::normalizer::Normalizer;
 use itertools::Itertools;
 use ruff_formatter::FormatOptions;
 use ruff_python_ast::comparable::ComparableMod;
-use ruff_python_formatter::{format_module_source, format_range, PreviewMode, PyFormatOptions};
-use ruff_python_parser::{parse, ParseOptions, UnsupportedSyntaxError};
+use ruff_python_formatter::{PreviewMode, PyFormatOptions, format_module_source, format_range};
+use ruff_python_parser::{ParseOptions, UnsupportedSyntaxError, parse};
 use ruff_source_file::{LineIndex, OneIndexed};
 use ruff_text_size::{Ranged, TextRange, TextSize};
 use rustc_hash::FxHashMap;
@@ -324,7 +324,12 @@ fn format_file(source: &str, options: &PyFormatOptions, input_path: &Path) -> St
 
         (Cow::Owned(without_markers), content)
     } else {
-        let printed = format_module_source(source, options.clone()).expect("Formatting to succeed");
+        let printed = format_module_source(source, options.clone()).unwrap_or_else(|err| {
+            panic!(
+                "Formatting `{input_path} was expected to succeed but it failed: {err}",
+                input_path = input_path.display()
+            )
+        });
         let formatted_code = printed.into_code();
 
         ensure_stability_when_formatting_twice(&formatted_code, options, input_path);
@@ -430,10 +435,10 @@ fn ensure_unchanged_ast(
             formatted_unsupported_syntax_errors
                 .into_values()
                 .map(|error| {
-                    let location = index.source_location(error.start(), formatted_code);
+                    let location = index.line_column(error.start(), formatted_code);
                     format!(
                         "{row}:{col} {error}",
-                        row = location.row,
+                        row = location.line,
                         col = location.column
                     )
                 })

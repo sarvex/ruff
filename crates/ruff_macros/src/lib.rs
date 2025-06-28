@@ -4,7 +4,7 @@ use crate::cache_key::derive_cache_key;
 use crate::newtype_index::generate_newtype_index;
 use crate::violation_metadata::violation_metadata;
 use proc_macro::TokenStream;
-use syn::{parse_macro_input, DeriveInput, Error, ItemFn, ItemStruct};
+use syn::{DeriveInput, Error, ItemFn, ItemStruct, parse_macro_input};
 
 mod cache_key;
 mod combine;
@@ -16,6 +16,7 @@ mod map_codes;
 mod newtype_index;
 mod rule_code_prefix;
 mod rule_namespace;
+mod rust_doc;
 mod violation_metadata;
 
 #[proc_macro_derive(OptionsMetadata, attributes(option, doc, option_group))]
@@ -23,6 +24,15 @@ pub fn derive_options_metadata(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as DeriveInput);
 
     config::derive_impl(input)
+        .unwrap_or_else(syn::Error::into_compile_error)
+        .into()
+}
+
+#[proc_macro_derive(RustDoc)]
+pub fn derive_rust_doc(input: TokenStream) -> TokenStream {
+    let input = parse_macro_input!(input as DeriveInput);
+
+    rust_doc::derive_impl(input)
         .unwrap_or_else(syn::Error::into_compile_error)
         .into()
 }
@@ -36,8 +46,8 @@ pub fn derive_combine_options(input: TokenStream) -> TokenStream {
         .into()
 }
 
-/// Automatically derives a `red_knot_project::project::Combine` implementation for the attributed type
-/// that calls `red_knot_project::project::Combine::combine` for each field.
+/// Automatically derives a `ty_project::project::Combine` implementation for the attributed type
+/// that calls `ty_project::project::Combine::combine` for each field.
 ///
 /// The derive macro can only be used on structs. Enums aren't yet supported.
 #[proc_macro_derive(Combine)]
@@ -49,7 +59,7 @@ pub fn derive_combine(input: TokenStream) -> TokenStream {
         .into()
 }
 
-/// Converts a screaming snake case identifier to a kebab case string.
+/// Converts an identifier to a kebab case string.
 #[proc_macro]
 pub fn kebab_case(input: TokenStream) -> TokenStream {
     let input = parse_macro_input!(input as syn::Ident);

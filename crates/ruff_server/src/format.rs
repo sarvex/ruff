@@ -2,7 +2,7 @@ use std::path::Path;
 
 use ruff_formatter::PrintedRange;
 use ruff_python_ast::PySourceType;
-use ruff_python_formatter::{format_module_source, FormatModuleError};
+use ruff_python_formatter::{FormatModuleError, format_module_source};
 use ruff_text_size::TextRange;
 use ruff_workspace::FormatterSettings;
 
@@ -12,10 +12,10 @@ pub(crate) fn format(
     document: &TextDocument,
     source_type: PySourceType,
     formatter_settings: &FormatterSettings,
-    path: Option<&Path>,
+    path: &Path,
 ) -> crate::Result<Option<String>> {
     let format_options =
-        formatter_settings.to_format_options(source_type, document.contents(), path);
+        formatter_settings.to_format_options(source_type, document.contents(), Some(path));
     match format_module_source(document.contents(), format_options) {
         Ok(formatted) => {
             let formatted = formatted.into_code();
@@ -40,10 +40,10 @@ pub(crate) fn format_range(
     source_type: PySourceType,
     formatter_settings: &FormatterSettings,
     range: TextRange,
-    path: Option<&Path>,
+    path: &Path,
 ) -> crate::Result<Option<PrintedRange>> {
     let format_options =
-        formatter_settings.to_format_options(source_type, document.contents(), path);
+        formatter_settings.to_format_options(source_type, document.contents(), Some(path));
 
     match ruff_python_formatter::format_range(document.contents(), range, format_options) {
         Ok(formatted) => {
@@ -73,8 +73,8 @@ mod tests {
     use ruff_text_size::{TextRange, TextSize};
     use ruff_workspace::FormatterSettings;
 
-    use crate::format::{format, format_range};
     use crate::TextDocument;
+    use crate::format::{format, format_range};
 
     #[test]
     fn format_per_file_version() {
@@ -97,7 +97,7 @@ with open("a_really_long_foo") as foo, open("a_really_long_bar") as bar, open("a
                 per_file_target_version,
                 ..Default::default()
             },
-            Some(Path::new("test.py")),
+            Path::new("test.py"),
         )
         .expect("Expected no errors when formatting")
         .expect("Expected formatting changes");
@@ -119,7 +119,7 @@ with open("a_really_long_foo") as foo, open("a_really_long_bar") as bar, open("a
                 unresolved_target_version: PythonVersion::PY38,
                 ..Default::default()
             },
-            Some(Path::new("test.py")),
+            Path::new("test.py"),
         )
         .expect("Expected no errors when formatting")
         .expect("Expected formatting changes");
@@ -167,7 +167,7 @@ sys.exit(
                 ..Default::default()
             },
             range,
-            Some(Path::new("test.py")),
+            Path::new("test.py"),
         )
         .expect("Expected no errors when formatting")
         .expect("Expected formatting changes");
@@ -190,7 +190,7 @@ sys.exit(
                 ..Default::default()
             },
             range,
-            Some(Path::new("test.py")),
+            Path::new("test.py"),
         )
         .expect("Expected no errors when formatting")
         .expect("Expected formatting changes");

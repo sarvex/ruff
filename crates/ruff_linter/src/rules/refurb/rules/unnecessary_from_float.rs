@@ -1,9 +1,10 @@
-use ruff_diagnostics::{Diagnostic, Edit, Fix, FixAvailability, Violation};
-use ruff_macros::{derive_message_formats, ViolationMetadata};
+use ruff_macros::{ViolationMetadata, derive_message_formats};
 use ruff_python_ast::{self as ast, Expr, ExprCall};
 use ruff_text_size::Ranged;
 
 use crate::checkers::ast::Checker;
+use crate::linter::float::as_non_finite_float_string_literal;
+use crate::{Edit, Fix, FixAvailability, Violation};
 
 /// ## What it does
 /// Checks for unnecessary `from_float` and `from_decimal` usages to construct
@@ -92,7 +93,7 @@ pub(crate) fn unnecessary_from_float(checker: &Checker, call: &ExprCall) {
         return;
     }
 
-    let mut diagnostic = Diagnostic::new(
+    let mut diagnostic = checker.report_diagnostic(
         UnnecessaryFromFloat {
             method_name,
             constructor,
@@ -109,10 +110,10 @@ pub(crate) fn unnecessary_from_float(checker: &Checker, call: &ExprCall) {
     'short_circuit: {
         if !matches!(constructor, Constructor::Decimal) {
             break 'short_circuit;
-        };
+        }
         if !(method_name == MethodName::FromFloat) {
             break 'short_circuit;
-        };
+        }
 
         let Some(value) = (match method_name {
             MethodName::FromFloat => call.arguments.find_argument_value("f", 0),
@@ -131,39 +132,31 @@ pub(crate) fn unnecessary_from_float(checker: &Checker, call: &ExprCall) {
         };
 
         // Must have exactly one argument, which is a string literal.
-        if arguments.keywords.len() != 0 {
+        if !arguments.keywords.is_empty() {
             break 'short_circuit;
-        };
+        }
         let [float] = arguments.args.as_ref() else {
             break 'short_circuit;
         };
-        let Some(float) = float.as_string_literal_expr() else {
-            break 'short_circuit;
-        };
-        if !matches!(
-            float.value.to_str().to_lowercase().as_str(),
-            "inf" | "-inf" | "infinity" | "-infinity" | "nan"
-        ) {
+        if as_non_finite_float_string_literal(float).is_none() {
             break 'short_circuit;
         }
 
         // Must be a call to the `float` builtin.
         if !semantic.match_builtin_expr(func, "float") {
             break 'short_circuit;
-        };
+        }
 
         let replacement = checker.locator().slice(float).to_string();
         diagnostic.set_fix(Fix::safe_edits(
             edit,
             [Edit::range_replacement(replacement, call.range())],
         ));
-        checker.report_diagnostic(diagnostic);
 
         return;
     }
 
     diagnostic.set_fix(Fix::safe_edit(edit));
-    checker.report_diagnostic(diagnostic);
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]

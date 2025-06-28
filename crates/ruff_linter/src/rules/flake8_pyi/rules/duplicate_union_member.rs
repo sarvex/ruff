@@ -1,19 +1,16 @@
+use rustc_hash::FxHashSet;
 use std::collections::HashSet;
 
-use anyhow::Result;
-
-use ruff_python_ast::name::Name;
-use rustc_hash::FxHashSet;
-
-use ruff_diagnostics::{Applicability, Diagnostic, Edit, Fix, FixAvailability, Violation};
-use ruff_macros::{derive_message_formats, ViolationMetadata};
+use ruff_macros::{ViolationMetadata, derive_message_formats};
 use ruff_python_ast::comparable::ComparableExpr;
-use ruff_python_ast::{Expr, ExprBinOp, ExprContext, ExprName, ExprSubscript, ExprTuple, Operator};
-use ruff_python_semantic::analyze::typing::traverse_union;
-use ruff_text_size::{Ranged, TextRange};
+use ruff_python_ast::{AtomicNodeIndex, Expr, ExprBinOp, ExprNoneLiteral, Operator, PythonVersion};
+use ruff_python_semantic::analyze::typing::{traverse_union, traverse_union_and_optional};
+use ruff_text_size::{Ranged, TextRange, TextSize};
 
+use super::generate_union_fix;
 use crate::checkers::ast::Checker;
-use crate::importer::ImportRequest;
+use crate::preview::is_optional_as_none_in_union_enabled;
+use crate::{Applicability, Edit, Fix, FixAvailability, Violation};
 
 /// ## What it does
 /// Checks for duplicate union members.
@@ -64,7 +61,7 @@ impl Violation for DuplicateUnionMember {
 pub(crate) fn duplicate_union_member<'a>(checker: &Checker, expr: &'a Expr) {
     let mut seen_nodes: HashSet<ComparableExpr<'_>, _> = FxHashSet::default();
     let mut unique_nodes: Vec<&Expr> = Vec::new();
-    let mut diagnostics: Vec<Diagnostic> = Vec::new();
+    let mut diagnostics = Vec::new();
 
     let mut union_type = UnionKind::TypingUnion;
     // Adds a member to `literal_exprs` if it is a `Literal` annotation
@@ -73,21 +70,35 @@ pub(crate) fn duplicate_union_member<'a>(checker: &Checker, expr: &'a Expr) {
             union_type = UnionKind::PEP604;
         }
 
-        // If we've already seen this union member, raise a violation.
-        if seen_nodes.insert(expr.into()) {
-            unique_nodes.push(expr);
+        let virtual_expr = if is_optional_as_none_in_union_enabled(checker.settings())
+            && is_optional_type(checker, expr)
+        {
+            // If the union member is an `Optional`, add a virtual `None` literal.
+            &VIRTUAL_NONE_LITERAL
         } else {
-            diagnostics.push(Diagnostic::new(
+            expr
+        };
+
+        // If we've already seen this union member, raise a violation.
+        if seen_nodes.insert(virtual_expr.into()) {
+            unique_nodes.push(virtual_expr);
+        } else {
+            diagnostics.push(checker.report_diagnostic(
                 DuplicateUnionMember {
-                    duplicate_name: checker.generator().expr(expr),
+                    duplicate_name: checker.generator().expr(virtual_expr),
                 },
+                // Use the real expression's range for diagnostics,
                 expr.range(),
             ));
         }
     };
 
     // Traverse the union, collect all diagnostic members
-    traverse_union(&mut check_for_duplicate_members, checker.semantic(), expr);
+    if is_optional_as_none_in_union_enabled(checker.settings()) {
+        traverse_union_and_optional(&mut check_for_duplicate_members, checker.semantic(), expr);
+    } else {
+        traverse_union(&mut check_for_duplicate_members, checker.semantic(), expr);
+    }
 
     if diagnostics.is_empty() {
         return;
@@ -117,7 +128,19 @@ pub(crate) fn duplicate_union_member<'a>(checker: &Checker, expr: &'a Expr) {
                 applicability,
             )),
             UnionKind::TypingUnion => {
-                generate_union_fix(checker, unique_nodes, expr, applicability).ok()
+                // Request `typing.Union`
+                let Some(importer) = checker.typing_importer("Union", PythonVersion::lowest())
+                else {
+                    return;
+                };
+                generate_union_fix(
+                    checker.generator(),
+                    &importer,
+                    unique_nodes,
+                    expr,
+                    applicability,
+                )
+                .ok()
             }
         }
     };
@@ -127,9 +150,6 @@ pub(crate) fn duplicate_union_member<'a>(checker: &Checker, expr: &'a Expr) {
             diagnostic.set_fix(fix.clone());
         }
     }
-
-    // Add all diagnostics to the checker
-    checker.report_diagnostics(diagnostics);
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -158,6 +178,7 @@ fn generate_pep604_fix(
                     op: Operator::BitOr,
                     right: Box::new(right.clone()),
                     range: TextRange::default(),
+                    node_index: ruff_python_ast::AtomicNodeIndex::dummy(),
                 }))
             } else {
                 Some(right.clone())
@@ -171,42 +192,11 @@ fn generate_pep604_fix(
     )
 }
 
-/// Generate a [`Fix`] for two or more type expressions, e.g. `typing.Union[int, float, complex]`.
-fn generate_union_fix(
-    checker: &Checker,
-    nodes: Vec<&Expr>,
-    annotation: &Expr,
-    applicability: Applicability,
-) -> Result<Fix> {
-    debug_assert!(nodes.len() >= 2, "At least two nodes required");
+static VIRTUAL_NONE_LITERAL: Expr = Expr::NoneLiteral(ExprNoneLiteral {
+    node_index: AtomicNodeIndex::dummy(),
+    range: TextRange::new(TextSize::new(0), TextSize::new(0)),
+});
 
-    // Request `typing.Union`
-    let (import_edit, binding) = checker.importer().get_or_import_symbol(
-        &ImportRequest::import_from("typing", "Union"),
-        annotation.start(),
-        checker.semantic(),
-    )?;
-
-    // Construct the expression as `Subscript[typing.Union, Tuple[expr, [expr, ...]]]`
-    let new_expr = Expr::Subscript(ExprSubscript {
-        range: TextRange::default(),
-        value: Box::new(Expr::Name(ExprName {
-            id: Name::new(binding),
-            ctx: ExprContext::Store,
-            range: TextRange::default(),
-        })),
-        slice: Box::new(Expr::Tuple(ExprTuple {
-            elts: nodes.into_iter().cloned().collect(),
-            range: TextRange::default(),
-            ctx: ExprContext::Load,
-            parenthesized: false,
-        })),
-        ctx: ExprContext::Load,
-    });
-
-    Ok(Fix::applicable_edits(
-        Edit::range_replacement(checker.generator().expr(&new_expr), annotation.range()),
-        [import_edit],
-        applicability,
-    ))
+fn is_optional_type(checker: &Checker, expr: &Expr) -> bool {
+    checker.semantic().match_typing_expr(expr, "Optional")
 }

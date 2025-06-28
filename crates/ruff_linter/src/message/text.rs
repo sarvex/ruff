@@ -7,15 +7,15 @@ use colored::Colorize;
 use ruff_annotate_snippets::{Level, Renderer, Snippet};
 
 use ruff_notebook::NotebookIndex;
-use ruff_source_file::{OneIndexed, SourceLocation};
+use ruff_source_file::{LineColumn, OneIndexed};
 use ruff_text_size::{Ranged, TextLen, TextRange, TextSize};
 
+use crate::Locator;
 use crate::fs::relativize_path;
 use crate::line_width::{IndentWidth, LineWidthBuilder};
 use crate::message::diff::Diff;
-use crate::message::{Emitter, EmitterContext, Message};
+use crate::message::{Emitter, EmitterContext, OldDiagnostic, SecondaryCode};
 use crate::settings::types::UnsafeFixes;
-use crate::Locator;
 
 bitflags! {
     #[derive(Default)]
@@ -66,19 +66,19 @@ impl Emitter for TextEmitter {
     fn emit(
         &mut self,
         writer: &mut dyn Write,
-        messages: &[Message],
+        diagnostics: &[OldDiagnostic],
         context: &EmitterContext,
     ) -> anyhow::Result<()> {
-        for message in messages {
+        for message in diagnostics {
             write!(
                 writer,
                 "{path}{sep}",
-                path = relativize_path(message.filename()).bold(),
+                path = relativize_path(&*message.filename()).bold(),
                 sep = ":".cyan(),
             )?;
 
             let start_location = message.compute_start_location();
-            let notebook_index = context.notebook_index(message.filename());
+            let notebook_index = context.notebook_index(&message.filename());
 
             // Check if we're working on a jupyter notebook and translate positions with cell accordingly
             let diagnostic_location = if let Some(notebook_index) = notebook_index {
@@ -86,14 +86,14 @@ impl Emitter for TextEmitter {
                     writer,
                     "cell {cell}{sep}",
                     cell = notebook_index
-                        .cell(start_location.row)
+                        .cell(start_location.line)
                         .unwrap_or(OneIndexed::MIN),
                     sep = ":".cyan(),
                 )?;
 
-                SourceLocation {
-                    row: notebook_index
-                        .cell_row(start_location.row)
+                LineColumn {
+                    line: notebook_index
+                        .cell_row(start_location.line)
                         .unwrap_or(OneIndexed::MIN),
                     column: start_location.column,
                 }
@@ -104,7 +104,7 @@ impl Emitter for TextEmitter {
             writeln!(
                 writer,
                 "{row}{sep}{col}{sep} {code_and_body}",
-                row = diagnostic_location.row,
+                row = diagnostic_location.line,
                 col = diagnostic_location.column,
                 sep = ":".cyan(),
                 code_and_body = RuleCodeAndBody {
@@ -140,7 +140,7 @@ impl Emitter for TextEmitter {
 }
 
 pub(super) struct RuleCodeAndBody<'a> {
-    pub(crate) message: &'a Message,
+    pub(crate) message: &'a OldDiagnostic,
     pub(crate) show_fix_status: bool,
     pub(crate) unsafe_fixes: UnsafeFixes,
 }
@@ -151,8 +151,8 @@ impl Display for RuleCodeAndBody<'_> {
             if let Some(fix) = self.message.fix() {
                 // Do not display an indicator for inapplicable fixes
                 if fix.applies(self.unsafe_fixes.required_applicability()) {
-                    if let Some(rule) = self.message.rule() {
-                        write!(f, "{} ", rule.noqa_code().to_string().red().bold())?;
+                    if let Some(code) = self.message.secondary_code() {
+                        write!(f, "{} ", code.red().bold())?;
                     }
                     return write!(
                         f,
@@ -162,13 +162,13 @@ impl Display for RuleCodeAndBody<'_> {
                     );
                 }
             }
-        };
+        }
 
-        if let Some(rule) = self.message.rule() {
+        if let Some(code) = self.message.secondary_code() {
             write!(
                 f,
                 "{code} {body}",
-                code = rule.noqa_code().to_string().red().bold(),
+                code = code.red().bold(),
                 body = self.message.body(),
             )
         } else {
@@ -178,7 +178,7 @@ impl Display for RuleCodeAndBody<'_> {
 }
 
 pub(super) struct MessageCodeFrame<'a> {
-    pub(crate) message: &'a Message,
+    pub(crate) message: &'a OldDiagnostic,
     pub(crate) notebook_index: Option<&'a NotebookIndex>,
 }
 
@@ -191,7 +191,8 @@ impl Display for MessageCodeFrame<'_> {
             Vec::new()
         };
 
-        let source_code = self.message.source_file().to_source_code();
+        let source_file = self.message.source_file();
+        let source_code = source_file.to_source_code();
 
         let content_start_index = source_code.line_index(self.message.start());
         let mut start_index = content_start_index.saturating_sub(2);
@@ -253,8 +254,9 @@ impl Display for MessageCodeFrame<'_> {
 
         let label = self
             .message
-            .rule()
-            .map_or_else(String::new, |rule| rule.noqa_code().to_string());
+            .secondary_code()
+            .map(SecondaryCode::as_str)
+            .unwrap_or_default();
 
         let line_start = self.notebook_index.map_or_else(
             || start_index.get(),
@@ -268,7 +270,7 @@ impl Display for MessageCodeFrame<'_> {
 
         let span = usize::from(source.annotation_range.start())
             ..usize::from(source.annotation_range.end());
-        let annotation = Level::Error.span(span).label(&label);
+        let annotation = Level::Error.span(span).label(label);
         let snippet = Snippet::source(&source.text)
             .line_start(line_start)
             .annotation(annotation)
@@ -406,17 +408,17 @@ impl<'a> SourceCode<'a> {
 mod tests {
     use insta::assert_snapshot;
 
-    use crate::message::tests::{
-        capture_emitter_notebook_output, capture_emitter_output, create_messages,
-        create_notebook_messages, create_syntax_error_messages,
-    };
     use crate::message::TextEmitter;
+    use crate::message::tests::{
+        capture_emitter_notebook_output, capture_emitter_output, create_diagnostics,
+        create_notebook_diagnostics, create_syntax_error_diagnostics,
+    };
     use crate::settings::types::UnsafeFixes;
 
     #[test]
     fn default() {
         let mut emitter = TextEmitter::default().with_show_source(true);
-        let content = capture_emitter_output(&mut emitter, &create_messages());
+        let content = capture_emitter_output(&mut emitter, &create_diagnostics());
 
         assert_snapshot!(content);
     }
@@ -426,7 +428,7 @@ mod tests {
         let mut emitter = TextEmitter::default()
             .with_show_fix_status(true)
             .with_show_source(true);
-        let content = capture_emitter_output(&mut emitter, &create_messages());
+        let content = capture_emitter_output(&mut emitter, &create_diagnostics());
 
         assert_snapshot!(content);
     }
@@ -437,7 +439,7 @@ mod tests {
             .with_show_fix_status(true)
             .with_show_source(true)
             .with_unsafe_fixes(UnsafeFixes::Enabled);
-        let content = capture_emitter_output(&mut emitter, &create_messages());
+        let content = capture_emitter_output(&mut emitter, &create_diagnostics());
 
         assert_snapshot!(content);
     }
@@ -448,7 +450,7 @@ mod tests {
             .with_show_fix_status(true)
             .with_show_source(true)
             .with_unsafe_fixes(UnsafeFixes::Enabled);
-        let (messages, notebook_indexes) = create_notebook_messages();
+        let (messages, notebook_indexes) = create_notebook_diagnostics();
         let content = capture_emitter_notebook_output(&mut emitter, &messages, &notebook_indexes);
 
         assert_snapshot!(content);
@@ -457,7 +459,7 @@ mod tests {
     #[test]
     fn syntax_errors() {
         let mut emitter = TextEmitter::default().with_show_source(true);
-        let content = capture_emitter_output(&mut emitter, &create_syntax_error_messages());
+        let content = capture_emitter_output(&mut emitter, &create_syntax_error_diagnostics());
 
         assert_snapshot!(content);
     }

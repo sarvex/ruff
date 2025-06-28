@@ -3,15 +3,15 @@ use ruff_notebook::{Notebook, NotebookError};
 use std::panic::RefUnwindSafe;
 use std::sync::{Arc, Mutex};
 
+use crate::Db;
 use crate::files::File;
 use crate::system::{
-    DirectoryEntry, GlobError, MemoryFileSystem, Metadata, Result, System, SystemPath,
-    SystemPathBuf, SystemVirtualPath,
+    CaseSensitivity, DirectoryEntry, GlobError, MemoryFileSystem, Metadata, Result, System,
+    SystemPath, SystemPathBuf, SystemVirtualPath,
 };
-use crate::Db;
 
-use super::walk_directory::WalkDirectoryBuilder;
 use super::WritableSystem;
+use super::walk_directory::WalkDirectoryBuilder;
 
 /// System implementation intended for testing.
 ///
@@ -117,7 +117,7 @@ impl System for TestSystem {
         &self,
         pattern: &str,
     ) -> std::result::Result<
-        Box<dyn Iterator<Item = std::result::Result<SystemPathBuf, GlobError>>>,
+        Box<dyn Iterator<Item = std::result::Result<SystemPathBuf, GlobError>> + '_>,
         PatternError,
     > {
         self.system().glob(pattern)
@@ -129,6 +129,14 @@ impl System for TestSystem {
 
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
         self
+    }
+
+    fn path_exists_case_sensitive(&self, path: &SystemPath, prefix: &SystemPath) -> bool {
+        self.system().path_exists_case_sensitive(path, prefix)
+    }
+
+    fn case_sensitivity(&self) -> CaseSensitivity {
+        self.system().case_sensitivity()
     }
 }
 
@@ -272,6 +280,13 @@ impl InMemorySystem {
         }
     }
 
+    pub fn from_memory_fs(memory_fs: MemoryFileSystem) -> Self {
+        Self {
+            user_config_directory: Mutex::new(None),
+            memory_fs,
+        }
+    }
+
     pub fn fs(&self) -> &MemoryFileSystem {
         &self.memory_fs
     }
@@ -335,7 +350,7 @@ impl System for InMemorySystem {
         &self,
         pattern: &str,
     ) -> std::result::Result<
-        Box<dyn Iterator<Item = std::result::Result<SystemPathBuf, GlobError>>>,
+        Box<dyn Iterator<Item = std::result::Result<SystemPathBuf, GlobError>> + '_>,
         PatternError,
     > {
         let iterator = self.memory_fs.glob(pattern)?;
@@ -348,6 +363,16 @@ impl System for InMemorySystem {
 
     fn as_any_mut(&mut self) -> &mut dyn std::any::Any {
         self
+    }
+
+    #[inline]
+    fn path_exists_case_sensitive(&self, path: &SystemPath, _prefix: &SystemPath) -> bool {
+        // The memory file system is case-sensitive.
+        self.path_exists(path)
+    }
+
+    fn case_sensitivity(&self) -> CaseSensitivity {
+        CaseSensitivity::CaseSensitive
     }
 }
 

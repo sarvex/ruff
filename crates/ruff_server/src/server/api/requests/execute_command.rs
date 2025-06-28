@@ -2,14 +2,13 @@ use std::fmt::Write;
 use std::str::FromStr;
 
 use crate::edit::WorkspaceEditTracker;
+use crate::server::SupportedCommand;
 use crate::server::api::LSPResult;
-use crate::server::schedule::Task;
-use crate::server::{client, SupportedCommand};
-use crate::session::Session;
+use crate::session::{Client, Session};
+use crate::{DIAGNOSTIC_NAME, DocumentKey};
 use crate::{edit::DocumentVersion, server};
-use crate::{DocumentKey, DIAGNOSTIC_NAME};
 use lsp_server::ErrorCode;
-use lsp_types::{self as types, request as req, TextDocumentIdentifier};
+use lsp_types::{self as types, TextDocumentIdentifier, request as req};
 use serde::Deserialize;
 
 pub(crate) struct ExecuteCommand;
@@ -38,27 +37,23 @@ impl super::RequestHandler for ExecuteCommand {
 impl super::SyncRequestHandler for ExecuteCommand {
     fn run(
         session: &mut Session,
-        notifier: client::Notifier,
-        requester: &mut client::Requester,
+        client: &Client,
         params: types::ExecuteCommandParams,
     ) -> server::Result<Option<serde_json::Value>> {
         let command = SupportedCommand::from_str(&params.command)
             .with_failure_code(ErrorCode::InvalidParams)?;
 
         if command == SupportedCommand::Debug {
+            // TODO: Currently we only use the first argument i.e., the first document that's
+            // provided but we could expand this to consider all *open* documents.
             let argument: DebugCommandArgument = params.arguments.into_iter().next().map_or_else(
                 || Ok(DebugCommandArgument::default()),
                 |value| serde_json::from_value(value).with_failure_code(ErrorCode::InvalidParams),
             )?;
-            let output = debug_information(session, argument.text_document)
-                .with_failure_code(ErrorCode::InternalError)?;
-            notifier
-                .notify::<types::notification::LogMessage>(types::LogMessageParams {
-                    message: output.clone(),
-                    typ: types::MessageType::INFO,
-                })
-                .with_failure_code(ErrorCode::InternalError)?;
-            return Ok(Some(serde_json::Value::String(output)));
+            return Ok(Some(serde_json::Value::String(
+                debug_information(session, argument.text_document)
+                    .with_failure_code(ErrorCode::InternalError)?,
+            )));
         }
 
         // check if we can apply a workspace edit
@@ -79,7 +74,7 @@ impl super::SyncRequestHandler for ExecuteCommand {
         for Argument { uri, version } in arguments {
             let Some(snapshot) = session.take_snapshot(uri.clone()) else {
                 tracing::error!("Document at {uri} could not be opened");
-                show_err_msg!("Ruff does not recognize this file");
+                client.show_error_message("Ruff does not recognize this file");
                 return Ok(None);
             };
             match command {
@@ -117,7 +112,8 @@ impl super::SyncRequestHandler for ExecuteCommand {
 
         if !edit_tracker.is_empty() {
             apply_edit(
-                requester,
+                session,
+                client,
                 command.label(),
                 edit_tracker.into_workspace_edit(),
             )
@@ -129,24 +125,25 @@ impl super::SyncRequestHandler for ExecuteCommand {
 }
 
 fn apply_edit(
-    requester: &mut client::Requester,
+    session: &mut Session,
+    client: &Client,
     label: &str,
     edit: types::WorkspaceEdit,
 ) -> crate::Result<()> {
-    requester.request::<req::ApplyWorkspaceEdit>(
+    client.send_request::<req::ApplyWorkspaceEdit>(
+        session,
         types::ApplyWorkspaceEditParams {
             label: Some(format!("{DIAGNOSTIC_NAME}: {label}")),
             edit,
         },
-        |response| {
+        move |client, response| {
             if !response.applied {
                 let reason = response
                     .failure_reason
                     .unwrap_or_else(|| String::from("unspecified reason"));
                 tracing::error!("Failed to apply workspace edit: {reason}");
-                show_err_msg!("Ruff was unable to apply edits: {reason}");
+                client.show_error_message(format_args!("Ruff was unable to apply edits: {reason}"));
             }
-            Task::nothing()
         },
     )
 }

@@ -22,15 +22,14 @@ mod tests {
     use ruff_text_size::Ranged;
 
     use crate::linter::check_path;
-    use crate::registry::{AsRule, Linter, Rule};
+    use crate::registry::{Linter, Rule};
     use crate::rules::isort;
     use crate::rules::pyflakes;
     use crate::settings::types::PreviewMode;
-    use crate::settings::{flags, LinterSettings};
+    use crate::settings::{LinterSettings, flags};
     use crate::source_kind::SourceKind;
     use crate::test::{test_contents, test_path, test_snippet};
-    use crate::Locator;
-    use crate::{assert_messages, directives};
+    use crate::{Locator, OldDiagnostic, assert_diagnostics, directives};
 
     #[test_case(Rule::UnusedImport, Path::new("F401_0.py"))]
     #[test_case(Rule::UnusedImport, Path::new("F401_1.py"))]
@@ -186,7 +185,7 @@ mod tests {
             Path::new("pyflakes").join(path).as_path(),
             &LinterSettings::for_rule(rule_code),
         )?;
-        assert_messages!(snapshot, diagnostics);
+        assert_diagnostics!(snapshot, diagnostics);
         Ok(())
     }
 
@@ -209,7 +208,7 @@ mod tests {
                 ..LinterSettings::for_rule(rule_code)
             },
         )?;
-        assert_messages!(snapshot, diagnostics);
+        assert_diagnostics!(snapshot, diagnostics);
         Ok(())
     }
 
@@ -218,11 +217,11 @@ mod tests {
         let diagnostics = test_snippet(
             "PythonFinalizationError",
             &LinterSettings {
-                unresolved_target_version: ruff_python_ast::PythonVersion::PY312,
+                unresolved_target_version: ruff_python_ast::PythonVersion::PY312.into(),
                 ..LinterSettings::for_rule(Rule::UndefinedName)
             },
         );
-        assert_messages!(diagnostics);
+        assert_diagnostics!(diagnostics);
     }
 
     #[test_case(Rule::UnusedImport, Path::new("__init__.py"))]
@@ -246,7 +245,7 @@ mod tests {
                 ..LinterSettings::for_rule(rule_code)
             },
         )?;
-        assert_messages!(snapshot, diagnostics);
+        assert_diagnostics!(snapshot, diagnostics);
         Ok(())
     }
 
@@ -285,7 +284,7 @@ mod tests {
             },
         )
         .0;
-        assert_messages!(snapshot, diagnostics);
+        assert_diagnostics!(snapshot, diagnostics);
     }
 
     // Regression test for https://github.com/astral-sh/ruff/issues/12897
@@ -313,7 +312,7 @@ mod tests {
             ..LinterSettings::for_rule(rule_code)
         };
         let diagnostics = test_path(Path::new("pyflakes").join(path).as_path(), &settings)?;
-        assert_messages!(snapshot, diagnostics);
+        assert_diagnostics!(snapshot, diagnostics);
         Ok(())
     }
 
@@ -333,7 +332,7 @@ mod tests {
             Path::new("pyflakes").join(path).as_path(),
             &LinterSettings::for_rule(rule_code),
         )?;
-        assert_messages!(snapshot, diagnostics);
+        assert_diagnostics!(snapshot, diagnostics);
         Ok(())
     }
 
@@ -357,7 +356,7 @@ mod tests {
                 ..LinterSettings::for_rule(rule_code)
             },
         )?;
-        assert_messages!(snapshot, diagnostics);
+        assert_diagnostics!(snapshot, diagnostics);
         Ok(())
     }
 
@@ -373,7 +372,7 @@ mod tests {
                 ..LinterSettings::for_rule(rule_code)
             },
         )?;
-        assert_messages!(diagnostics);
+        assert_diagnostics!(diagnostics);
         Ok(())
     }
 
@@ -386,7 +385,7 @@ mod tests {
                 ..LinterSettings::for_rule(Rule::UnusedVariable)
             },
         )?;
-        assert_messages!(diagnostics);
+        assert_diagnostics!(diagnostics);
         Ok(())
     }
 
@@ -400,7 +399,7 @@ mod tests {
                 Rule::UnusedImport,
             ]),
         )?;
-        assert_messages!(diagnostics);
+        assert_diagnostics!(diagnostics);
         Ok(())
     }
 
@@ -410,7 +409,7 @@ mod tests {
             Path::new("pyflakes/builtins.py"),
             &LinterSettings::for_rules(vec![Rule::UndefinedName]),
         )?;
-        assert_messages!(diagnostics);
+        assert_diagnostics!(diagnostics);
         Ok(())
     }
 
@@ -423,7 +422,7 @@ mod tests {
                 ..LinterSettings::for_rules(vec![Rule::UndefinedName])
             },
         )?;
-        assert_messages!(diagnostics);
+        assert_diagnostics!(diagnostics);
         Ok(())
     }
 
@@ -433,7 +432,7 @@ mod tests {
             Path::new("pyflakes/typing_modules.py"),
             &LinterSettings::for_rules(vec![Rule::UndefinedName]),
         )?;
-        assert_messages!(diagnostics);
+        assert_diagnostics!(diagnostics);
         Ok(())
     }
 
@@ -446,7 +445,7 @@ mod tests {
                 ..LinterSettings::for_rules(vec![Rule::UndefinedName])
             },
         )?;
-        assert_messages!(diagnostics);
+        assert_diagnostics!(diagnostics);
         Ok(())
     }
 
@@ -456,7 +455,7 @@ mod tests {
             Path::new("pyflakes/future_annotations.py"),
             &LinterSettings::for_rules(vec![Rule::UnusedImport, Rule::UndefinedName]),
         )?;
-        assert_messages!(diagnostics);
+        assert_diagnostics!(diagnostics);
         Ok(())
     }
 
@@ -466,7 +465,7 @@ mod tests {
             Path::new("pyflakes/multi_statement_lines.py"),
             &LinterSettings::for_rule(Rule::UnusedImport),
         )?;
-        assert_messages!(diagnostics);
+        assert_diagnostics!(diagnostics);
         Ok(())
     }
 
@@ -479,7 +478,7 @@ mod tests {
                 ..LinterSettings::for_rule(Rule::UndefinedName)
             },
         )?;
-        assert_messages!(diagnostics);
+        assert_diagnostics!(diagnostics);
         Ok(())
     }
 
@@ -492,7 +491,7 @@ mod tests {
                 ..LinterSettings::for_rule(Rule::UndefinedName)
             },
         )?;
-        assert_messages!(diagnostics);
+        assert_diagnostics!(diagnostics);
         Ok(())
     }
 
@@ -509,7 +508,7 @@ mod tests {
                 ..LinterSettings::for_rule(Rule::UnusedImport)
             },
         )?;
-        assert_messages!(snapshot, diagnostics);
+        assert_diagnostics!(snapshot, diagnostics);
         Ok(())
     }
 
@@ -733,7 +732,7 @@ mod tests {
             contents,
             &LinterSettings::for_rules(Linter::Pyflakes.rules()),
         );
-        assert_messages!(snapshot, diagnostics);
+        assert_diagnostics!(snapshot, diagnostics);
     }
 
     /// A re-implementation of the Pyflakes test runner.
@@ -743,8 +742,9 @@ mod tests {
         let source_type = PySourceType::default();
         let source_kind = SourceKind::Python(contents.to_string());
         let settings = LinterSettings::for_rules(Linter::Pyflakes.rules());
+        let target_version = settings.unresolved_target_version;
         let options =
-            ParseOptions::from(source_type).with_target_version(settings.unresolved_target_version);
+            ParseOptions::from(source_type).with_target_version(target_version.parser_version());
         let parsed = ruff_python_parser::parse_unchecked(source_kind.source_code(), options)
             .try_into_module()
             .expect("PySourceType always parses into a module");
@@ -757,7 +757,7 @@ mod tests {
             &locator,
             &indexer,
         );
-        let mut diagnostics = check_path(
+        let mut messages = check_path(
             Path::new("<filename>"),
             None,
             &locator,
@@ -769,13 +769,15 @@ mod tests {
             &source_kind,
             source_type,
             &parsed,
-            settings.unresolved_target_version,
+            target_version,
         );
-        diagnostics.sort_by_key(Ranged::start);
-        let actual = diagnostics
+        messages.sort_by_key(Ranged::start);
+        let actual = messages
             .iter()
-            .map(|diagnostic| diagnostic.kind.rule())
+            .filter(|msg| !msg.is_syntax_error())
+            .map(OldDiagnostic::name)
             .collect::<Vec<_>>();
+        let expected: Vec<_> = expected.iter().map(|rule| rule.name().as_str()).collect();
         assert_eq!(actual, expected);
     }
 
@@ -3122,7 +3124,7 @@ lambda: fu
 
     #[test]
     fn redefined_by_gen_exp() {
-        // Re-using a global name as the loop variable for a generator
+        // Reusing a global name as the loop variable for a generator
         // expression results in a redefinition warning.
         flakes(
             "import fu; (1 for fu in range(1))",
@@ -4257,6 +4259,24 @@ lambda: fu
 
             class Y(NamedTuple):
                 y: NamedTuple("v", [("vv", int)])
+        "#,
+            &[],
+        );
+    }
+
+    #[test]
+    fn gh_issue_17196_regression_test() {
+        flakes(
+            r#"
+            from typing import Annotated
+
+            def type_annotations_from_tuple():
+                annos = (str, "foo", "bar")
+                return Annotated[annos]
+
+            def type_annotations_from_filtered_tuple():
+                annos = (str, None, "foo", None, "bar")
+                return Annotated[tuple([a for a in annos if a is not None])]
         "#,
             &[],
         );

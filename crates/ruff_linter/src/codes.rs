@@ -4,13 +4,13 @@
 /// `--select`. For pylint this is e.g. C0414 and E0118 but also C and E01.
 use std::fmt::Formatter;
 
-use strum_macros::{AsRefStr, EnumIter};
+use strum_macros::EnumIter;
 
-use crate::registry::{AsRule, Linter};
+use crate::registry::Linter;
 use crate::rule_selector::is_single_rule_selector;
 use crate::rules;
 
-#[derive(PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct NoqaCode(&'static str, &'static str);
 
 impl NoqaCode {
@@ -46,6 +46,21 @@ impl PartialEq<&str> for NoqaCode {
     }
 }
 
+impl PartialEq<NoqaCode> for &str {
+    fn eq(&self, other: &NoqaCode) -> bool {
+        other.eq(self)
+    }
+}
+
+impl serde::Serialize for NoqaCode {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        serializer.serialize_str(&self.to_string())
+    }
+}
+
 #[derive(Debug, Copy, Clone)]
 pub enum RuleGroup {
     /// The rule is stable.
@@ -61,7 +76,7 @@ pub enum RuleGroup {
 
 #[ruff_macros::map_codes]
 pub fn code_to_rule(linter: Linter, code: &str) -> Option<(RuleGroup, Rule)> {
-    #[allow(clippy::enum_glob_use)]
+    #[expect(clippy::enum_glob_use)]
     use Linter::*;
 
     #[rustfmt::skip]
@@ -189,10 +204,11 @@ pub fn code_to_rule(linter: Linter, code: &str) -> Option<(RuleGroup, Rule)> {
         (Pylint, "C0132") => (RuleGroup::Stable, rules::pylint::rules::TypeParamNameMismatch),
         (Pylint, "C0205") => (RuleGroup::Stable, rules::pylint::rules::SingleStringSlots),
         (Pylint, "C0206") => (RuleGroup::Stable, rules::pylint::rules::DictIndexMissingItems),
+        (Pylint, "C0207") => (RuleGroup::Preview, rules::pylint::rules::MissingMaxsplitArg),
         (Pylint, "C0208") => (RuleGroup::Stable, rules::pylint::rules::IterationOverSet),
         (Pylint, "C0414") => (RuleGroup::Stable, rules::pylint::rules::UselessImportAlias),
-        (Pylint, "C0415") => (RuleGroup::Preview, rules::pylint::rules::ImportOutsideTopLevel),
-        (Pylint, "C1802") => (RuleGroup::Preview, rules::pylint::rules::LenTest),
+        (Pylint, "C0415") => (RuleGroup::Stable, rules::pylint::rules::ImportOutsideTopLevel),
+        (Pylint, "C1802") => (RuleGroup::Stable, rules::pylint::rules::LenTest),
         (Pylint, "C1901") => (RuleGroup::Preview, rules::pylint::rules::CompareToEmptyString),
         (Pylint, "C2401") => (RuleGroup::Stable, rules::pylint::rules::NonAsciiName),
         (Pylint, "C2403") => (RuleGroup::Stable, rules::pylint::rules::NonAsciiImportName),
@@ -260,7 +276,7 @@ pub fn code_to_rule(linter: Linter, code: &str) -> Option<(RuleGroup, Rule)> {
         (Pylint, "R1722") => (RuleGroup::Stable, rules::pylint::rules::SysExitAlias),
         (Pylint, "R1730") => (RuleGroup::Stable, rules::pylint::rules::IfStmtMinMax),
         (Pylint, "R1716") => (RuleGroup::Stable, rules::pylint::rules::BooleanChainedComparison),
-        (Pylint, "R1733") => (RuleGroup::Preview, rules::pylint::rules::UnnecessaryDictIndexLookup),
+        (Pylint, "R1733") => (RuleGroup::Stable, rules::pylint::rules::UnnecessaryDictIndexLookup),
         (Pylint, "R1736") => (RuleGroup::Stable, rules::pylint::rules::UnnecessaryListIndexLookup),
         (Pylint, "R2004") => (RuleGroup::Stable, rules::pylint::rules::MagicValueComparison),
         (Pylint, "R2044") => (RuleGroup::Stable, rules::pylint::rules::EmptyComment),
@@ -271,7 +287,7 @@ pub fn code_to_rule(linter: Linter, code: &str) -> Option<(RuleGroup, Rule)> {
         #[cfg(any(feature = "test-rules", test))]
         (Pylint, "W0101") => (RuleGroup::Preview, rules::pylint::rules::UnreachableCode),
         (Pylint, "W0108") => (RuleGroup::Preview, rules::pylint::rules::UnnecessaryLambda),
-        (Pylint, "W0177") => (RuleGroup::Preview, rules::pylint::rules::NanComparison),
+        (Pylint, "W0177") => (RuleGroup::Stable, rules::pylint::rules::NanComparison),
         (Pylint, "W0120") => (RuleGroup::Stable, rules::pylint::rules::UselessElseOnLoop),
         (Pylint, "W0127") => (RuleGroup::Stable, rules::pylint::rules::SelfAssigningVariable),
         (Pylint, "W0128") => (RuleGroup::Stable, rules::pylint::rules::RedeclaredAssignedName),
@@ -288,12 +304,12 @@ pub fn code_to_rule(linter: Linter, code: &str) -> Option<(RuleGroup, Rule)> {
         (Pylint, "W0642") => (RuleGroup::Stable, rules::pylint::rules::SelfOrClsAssignment),
         (Pylint, "W0711") => (RuleGroup::Stable, rules::pylint::rules::BinaryOpException),
         (Pylint, "W1501") => (RuleGroup::Stable, rules::pylint::rules::BadOpenMode),
-        (Pylint, "W1507") => (RuleGroup::Preview, rules::pylint::rules::ShallowCopyEnviron),
+        (Pylint, "W1507") => (RuleGroup::Stable, rules::pylint::rules::ShallowCopyEnviron),
         (Pylint, "W1508") => (RuleGroup::Stable, rules::pylint::rules::InvalidEnvvarDefault),
         (Pylint, "W1509") => (RuleGroup::Stable, rules::pylint::rules::SubprocessPopenPreexecFn),
         (Pylint, "W1510") => (RuleGroup::Stable, rules::pylint::rules::SubprocessRunWithoutCheck),
         (Pylint, "W1514") => (RuleGroup::Preview, rules::pylint::rules::UnspecifiedEncoding),
-        (Pylint, "W1641") => (RuleGroup::Preview, rules::pylint::rules::EqWithoutHash),
+        (Pylint, "W1641") => (RuleGroup::Stable, rules::pylint::rules::EqWithoutHash),
         (Pylint, "W2101") => (RuleGroup::Stable, rules::pylint::rules::UselessWithLock),
         (Pylint, "W2901") => (RuleGroup::Stable, rules::pylint::rules::RedefinedLoopName),
         (Pylint, "W3201") => (RuleGroup::Preview, rules::pylint::rules::BadDunderMethodName),
@@ -362,7 +378,7 @@ pub fn code_to_rule(linter: Linter, code: &str) -> Option<(RuleGroup, Rule)> {
         (Flake8Bugbear, "904") => (RuleGroup::Stable, rules::flake8_bugbear::rules::RaiseWithoutFromInsideExcept),
         (Flake8Bugbear, "905") => (RuleGroup::Stable, rules::flake8_bugbear::rules::ZipWithoutExplicitStrict),
         (Flake8Bugbear, "909") => (RuleGroup::Preview, rules::flake8_bugbear::rules::LoopIteratorMutation),
-        (Flake8Bugbear, "911") => (RuleGroup::Preview, rules::flake8_bugbear::rules::BatchedWithoutExplicitStrict),
+        (Flake8Bugbear, "911") => (RuleGroup::Stable, rules::flake8_bugbear::rules::BatchedWithoutExplicitStrict),
 
         // flake8-blind-except
         (Flake8BlindExcept, "001") => (RuleGroup::Stable, rules::flake8_blind_except::rules::BlindExcept),
@@ -386,7 +402,7 @@ pub fn code_to_rule(linter: Linter, code: &str) -> Option<(RuleGroup, Rule)> {
         (Flake8Comprehensions, "17") => (RuleGroup::Stable, rules::flake8_comprehensions::rules::UnnecessaryMap),
         (Flake8Comprehensions, "18") => (RuleGroup::Stable, rules::flake8_comprehensions::rules::UnnecessaryLiteralWithinDictCall),
         (Flake8Comprehensions, "19") => (RuleGroup::Stable, rules::flake8_comprehensions::rules::UnnecessaryComprehensionInCall),
-        (Flake8Comprehensions, "20") => (RuleGroup::Preview, rules::flake8_comprehensions::rules::UnnecessaryDictComprehensionForIterable),
+        (Flake8Comprehensions, "20") => (RuleGroup::Stable, rules::flake8_comprehensions::rules::UnnecessaryDictComprehensionForIterable),
 
         // flake8-debugger
         (Flake8Debugger, "0") => (RuleGroup::Stable, rules::flake8_debugger::rules::Debugger),
@@ -489,7 +505,7 @@ pub fn code_to_rule(linter: Linter, code: &str) -> Option<(RuleGroup, Rule)> {
         (Flake8Simplify, "223") => (RuleGroup::Stable, rules::flake8_simplify::rules::ExprAndFalse),
         (Flake8Simplify, "300") => (RuleGroup::Stable, rules::flake8_simplify::rules::YodaConditions),
         (Flake8Simplify, "401") => (RuleGroup::Stable, rules::flake8_simplify::rules::IfElseBlockInsteadOfDictGet),
-        (Flake8Simplify, "905") => (RuleGroup::Preview, rules::flake8_simplify::rules::SplitStaticString),
+        (Flake8Simplify, "905") => (RuleGroup::Stable, rules::flake8_simplify::rules::SplitStaticString),
         (Flake8Simplify, "910") => (RuleGroup::Stable, rules::flake8_simplify::rules::DictGetWithNoneDefault),
         (Flake8Simplify, "911") => (RuleGroup::Stable, rules::flake8_simplify::rules::ZipDictKeysAndValues),
 
@@ -532,17 +548,18 @@ pub fn code_to_rule(linter: Linter, code: &str) -> Option<(RuleGroup, Rule)> {
         (Pyupgrade, "035") => (RuleGroup::Stable, rules::pyupgrade::rules::DeprecatedImport),
         (Pyupgrade, "036") => (RuleGroup::Stable, rules::pyupgrade::rules::OutdatedVersionBlock),
         (Pyupgrade, "037") => (RuleGroup::Stable, rules::pyupgrade::rules::QuotedAnnotation),
-        (Pyupgrade, "038") => (RuleGroup::Stable, rules::pyupgrade::rules::NonPEP604Isinstance),
+        (Pyupgrade, "038") => (RuleGroup::Deprecated, rules::pyupgrade::rules::NonPEP604Isinstance),
         (Pyupgrade, "039") => (RuleGroup::Stable, rules::pyupgrade::rules::UnnecessaryClassParentheses),
         (Pyupgrade, "040") => (RuleGroup::Stable, rules::pyupgrade::rules::NonPEP695TypeAlias),
         (Pyupgrade, "041") => (RuleGroup::Stable, rules::pyupgrade::rules::TimeoutErrorAlias),
         (Pyupgrade, "042") => (RuleGroup::Preview, rules::pyupgrade::rules::ReplaceStrEnum),
         (Pyupgrade, "043") => (RuleGroup::Stable, rules::pyupgrade::rules::UnnecessaryDefaultTypeArgs),
-        (Pyupgrade, "044") => (RuleGroup::Preview, rules::pyupgrade::rules::NonPEP646Unpack),
-        (Pyupgrade, "045") => (RuleGroup::Preview, rules::pyupgrade::rules::NonPEP604AnnotationOptional),
-        (Pyupgrade, "046") => (RuleGroup::Preview, rules::pyupgrade::rules::NonPEP695GenericClass),
-        (Pyupgrade, "047") => (RuleGroup::Preview, rules::pyupgrade::rules::NonPEP695GenericFunction),
-        (Pyupgrade, "049") => (RuleGroup::Preview, rules::pyupgrade::rules::PrivateTypeParameter),
+        (Pyupgrade, "044") => (RuleGroup::Stable, rules::pyupgrade::rules::NonPEP646Unpack),
+        (Pyupgrade, "045") => (RuleGroup::Stable, rules::pyupgrade::rules::NonPEP604AnnotationOptional),
+        (Pyupgrade, "046") => (RuleGroup::Stable, rules::pyupgrade::rules::NonPEP695GenericClass),
+        (Pyupgrade, "047") => (RuleGroup::Stable, rules::pyupgrade::rules::NonPEP695GenericFunction),
+        (Pyupgrade, "049") => (RuleGroup::Stable, rules::pyupgrade::rules::PrivateTypeParameter),
+        (Pyupgrade, "050") => (RuleGroup::Preview, rules::pyupgrade::rules::UselessClassMetaclassType),
 
         // pydocstyle
         (Pydocstyle, "100") => (RuleGroup::Stable, rules::pydocstyle::rules::UndocumentedPublicModule),
@@ -649,7 +666,7 @@ pub fn code_to_rule(linter: Linter, code: &str) -> Option<(RuleGroup, Rule)> {
         (Flake8Bandit, "317") => (RuleGroup::Stable, rules::flake8_bandit::rules::SuspiciousXMLSaxUsage),
         (Flake8Bandit, "318") => (RuleGroup::Stable, rules::flake8_bandit::rules::SuspiciousXMLMiniDOMUsage),
         (Flake8Bandit, "319") => (RuleGroup::Stable, rules::flake8_bandit::rules::SuspiciousXMLPullDOMUsage),
-        (Flake8Bandit, "320") => (RuleGroup::Stable, rules::flake8_bandit::rules::SuspiciousXMLETreeUsage),
+        (Flake8Bandit, "320") => (RuleGroup::Removed, rules::flake8_bandit::rules::SuspiciousXMLETreeUsage),
         (Flake8Bandit, "321") => (RuleGroup::Stable, rules::flake8_bandit::rules::SuspiciousFTPLibUsage),
         (Flake8Bandit, "323") => (RuleGroup::Stable, rules::flake8_bandit::rules::SuspiciousUnverifiedContextUsage),
         (Flake8Bandit, "324") => (RuleGroup::Stable, rules::flake8_bandit::rules::HashlibInsecureHashFunction),
@@ -690,6 +707,7 @@ pub fn code_to_rule(linter: Linter, code: &str) -> Option<(RuleGroup, Rule)> {
         (Flake8Bandit, "612") => (RuleGroup::Stable, rules::flake8_bandit::rules::LoggingConfigInsecureListen),
         (Flake8Bandit, "701") => (RuleGroup::Stable, rules::flake8_bandit::rules::Jinja2AutoescapeFalse),
         (Flake8Bandit, "702") => (RuleGroup::Stable, rules::flake8_bandit::rules::MakoTemplates),
+        (Flake8Bandit, "704") => (RuleGroup::Stable, rules::flake8_bandit::rules::UnsafeMarkupUse),
 
         // flake8-boolean-trap
         (Flake8BooleanTrap, "001") => (RuleGroup::Stable, rules::flake8_boolean_trap::rules::BooleanTypeHintPositionalArgument),
@@ -718,7 +736,7 @@ pub fn code_to_rule(linter: Linter, code: &str) -> Option<(RuleGroup, Rule)> {
         (Flake8Datetimez, "007") => (RuleGroup::Stable, rules::flake8_datetimez::rules::CallDatetimeStrptimeWithoutZone),
         (Flake8Datetimez, "011") => (RuleGroup::Stable, rules::flake8_datetimez::rules::CallDateToday),
         (Flake8Datetimez, "012") => (RuleGroup::Stable, rules::flake8_datetimez::rules::CallDateFromtimestamp),
-        (Flake8Datetimez, "901") => (RuleGroup::Preview, rules::flake8_datetimez::rules::DatetimeMinMax),
+        (Flake8Datetimez, "901") => (RuleGroup::Stable, rules::flake8_datetimez::rules::DatetimeMinMax),
 
         // pygrep-hooks
         (PygrepHooks, "001") => (RuleGroup::Removed, rules::pygrep_hooks::rules::Eval),
@@ -740,7 +758,7 @@ pub fn code_to_rule(linter: Linter, code: &str) -> Option<(RuleGroup, Rule)> {
         (PandasVet, "013") => (RuleGroup::Stable, rules::pandas_vet::rules::PandasUseOfDotStack),
         (PandasVet, "015") => (RuleGroup::Stable, rules::pandas_vet::rules::PandasUseOfPdMerge),
         (PandasVet, "101") => (RuleGroup::Stable, rules::pandas_vet::rules::PandasNuniqueConstantSeriesCheck),
-        (PandasVet, "901") => (RuleGroup::Stable, rules::pandas_vet::rules::PandasDfVariableName),
+        (PandasVet, "901") => (RuleGroup::Deprecated, rules::pandas_vet::rules::PandasDfVariableName),
 
         // flake8-errmsg
         (Flake8ErrMsg, "101") => (RuleGroup::Stable, rules::flake8_errmsg::rules::RawStringInException),
@@ -834,10 +852,10 @@ pub fn code_to_rule(linter: Linter, code: &str) -> Option<(RuleGroup, Rule)> {
         (Flake8PytestStyle, "025") => (RuleGroup::Stable, rules::flake8_pytest_style::rules::PytestErroneousUseFixturesOnFixture),
         (Flake8PytestStyle, "026") => (RuleGroup::Stable, rules::flake8_pytest_style::rules::PytestUseFixturesWithoutParameters),
         (Flake8PytestStyle, "027") => (RuleGroup::Stable, rules::flake8_pytest_style::rules::PytestUnittestRaisesAssertion),
-        (Flake8PytestStyle, "028") => (RuleGroup::Preview, rules::flake8_pytest_style::rules::PytestParameterWithDefaultArgument),
+        (Flake8PytestStyle, "028") => (RuleGroup::Stable, rules::flake8_pytest_style::rules::PytestParameterWithDefaultArgument),
         (Flake8PytestStyle, "029") => (RuleGroup::Preview, rules::flake8_pytest_style::rules::PytestWarnsWithoutWarning),
-        (Flake8PytestStyle, "030") => (RuleGroup::Preview, rules::flake8_pytest_style::rules::PytestWarnsTooBroad),
-        (Flake8PytestStyle, "031") => (RuleGroup::Preview, rules::flake8_pytest_style::rules::PytestWarnsWithMultipleStatements),
+        (Flake8PytestStyle, "030") => (RuleGroup::Stable, rules::flake8_pytest_style::rules::PytestWarnsTooBroad),
+        (Flake8PytestStyle, "031") => (RuleGroup::Stable, rules::flake8_pytest_style::rules::PytestWarnsWithMultipleStatements),
 
         // flake8-pie
         (Flake8Pie, "790") => (RuleGroup::Stable, rules::flake8_pie::rules::UnnecessaryPlaceholder),
@@ -870,8 +888,8 @@ pub fn code_to_rule(linter: Linter, code: &str) -> Option<(RuleGroup, Rule)> {
         (Flake8TypeChecking, "003") => (RuleGroup::Stable, rules::flake8_type_checking::rules::TypingOnlyStandardLibraryImport),
         (Flake8TypeChecking, "004") => (RuleGroup::Stable, rules::flake8_type_checking::rules::RuntimeImportInTypeCheckingBlock),
         (Flake8TypeChecking, "005") => (RuleGroup::Stable, rules::flake8_type_checking::rules::EmptyTypeCheckingBlock),
-        (Flake8TypeChecking, "006") => (RuleGroup::Preview, rules::flake8_type_checking::rules::RuntimeCastValue),
-        (Flake8TypeChecking, "007") => (RuleGroup::Preview, rules::flake8_type_checking::rules::UnquotedTypeAlias),
+        (Flake8TypeChecking, "006") => (RuleGroup::Stable, rules::flake8_type_checking::rules::RuntimeCastValue),
+        (Flake8TypeChecking, "007") => (RuleGroup::Stable, rules::flake8_type_checking::rules::UnquotedTypeAlias),
         (Flake8TypeChecking, "008") => (RuleGroup::Preview, rules::flake8_type_checking::rules::QuotedTypeAlias),
         (Flake8TypeChecking, "010") => (RuleGroup::Stable, rules::flake8_type_checking::rules::RuntimeStringUnion),
 
@@ -921,8 +939,9 @@ pub fn code_to_rule(linter: Linter, code: &str) -> Option<(RuleGroup, Rule)> {
         (Flake8UsePathlib, "205") => (RuleGroup::Stable, rules::flake8_use_pathlib::rules::OsPathGetctime),
         (Flake8UsePathlib, "206") => (RuleGroup::Stable, rules::flake8_use_pathlib::rules::OsSepSplit),
         (Flake8UsePathlib, "207") => (RuleGroup::Stable, rules::flake8_use_pathlib::rules::Glob),
-        (Flake8UsePathlib, "208") => (RuleGroup::Preview, rules::flake8_use_pathlib::violations::OsListdir),
-        (Flake8UsePathlib, "210") => (RuleGroup::Preview, rules::flake8_use_pathlib::rules::InvalidPathlibWithSuffix),
+        (Flake8UsePathlib, "208") => (RuleGroup::Stable, rules::flake8_use_pathlib::violations::OsListdir),
+        (Flake8UsePathlib, "210") => (RuleGroup::Stable, rules::flake8_use_pathlib::rules::InvalidPathlibWithSuffix),
+        (Flake8UsePathlib, "211") => (RuleGroup::Preview, rules::flake8_use_pathlib::violations::OsSymlink),
 
         // flake8-logging-format
         (Flake8LoggingFormat, "001") => (RuleGroup::Stable, rules::flake8_logging_format::violations::LoggingStringFormat),
@@ -949,7 +968,7 @@ pub fn code_to_rule(linter: Linter, code: &str) -> Option<(RuleGroup, Rule)> {
         // fastapi
         (FastApi, "001") => (RuleGroup::Stable, rules::fastapi::rules::FastApiRedundantResponseModel),
         (FastApi, "002") => (RuleGroup::Stable, rules::fastapi::rules::FastApiNonAnnotatedDependency),
-        (FastApi, "003") => (RuleGroup::Preview, rules::fastapi::rules::FastApiUnusedPathParameter),
+        (FastApi, "003") => (RuleGroup::Stable, rules::fastapi::rules::FastApiUnusedPathParameter),
 
         // pydoclint
         (Pydoclint, "201") => (RuleGroup::Preview, rules::pydoclint::rules::DocstringMissingReturns),
@@ -984,37 +1003,42 @@ pub fn code_to_rule(linter: Linter, code: &str) -> Option<(RuleGroup, Rule)> {
         (Ruff, "024") => (RuleGroup::Stable, rules::ruff::rules::MutableFromkeysValue),
         (Ruff, "026") => (RuleGroup::Stable, rules::ruff::rules::DefaultFactoryKwarg),
         (Ruff, "027") => (RuleGroup::Preview, rules::ruff::rules::MissingFStringSyntax),
-        (Ruff, "028") => (RuleGroup::Preview, rules::ruff::rules::InvalidFormatterSuppressionComment),
+        (Ruff, "028") => (RuleGroup::Stable, rules::ruff::rules::InvalidFormatterSuppressionComment),
         (Ruff, "029") => (RuleGroup::Preview, rules::ruff::rules::UnusedAsync),
         (Ruff, "030") => (RuleGroup::Stable, rules::ruff::rules::AssertWithPrintMessage),
         (Ruff, "031") => (RuleGroup::Preview, rules::ruff::rules::IncorrectlyParenthesizedTupleInSubscript),
         (Ruff, "032") => (RuleGroup::Stable, rules::ruff::rules::DecimalFromFloatLiteral),
         (Ruff, "033") => (RuleGroup::Stable, rules::ruff::rules::PostInitDefault),
         (Ruff, "034") => (RuleGroup::Stable, rules::ruff::rules::UselessIfElse),
-        (Ruff, "035") => (RuleGroup::Preview, rules::ruff::rules::UnsafeMarkupUse),
+        (Ruff, "035") => (RuleGroup::Removed, rules::ruff::rules::RuffUnsafeMarkupUse),
         (Ruff, "036") => (RuleGroup::Preview, rules::ruff::rules::NoneNotAtEndOfUnion),
         (Ruff, "037") => (RuleGroup::Preview, rules::ruff::rules::UnnecessaryEmptyIterableWithinDequeCall),
         (Ruff, "038") => (RuleGroup::Preview, rules::ruff::rules::RedundantBoolLiteral),
         (Ruff, "039") => (RuleGroup::Preview, rules::ruff::rules::UnrawRePattern),
-        (Ruff, "040") => (RuleGroup::Preview, rules::ruff::rules::InvalidAssertMessageLiteralArgument),
-        (Ruff, "041") => (RuleGroup::Preview, rules::ruff::rules::UnnecessaryNestedLiteral),
+        (Ruff, "040") => (RuleGroup::Stable, rules::ruff::rules::InvalidAssertMessageLiteralArgument),
+        (Ruff, "041") => (RuleGroup::Stable, rules::ruff::rules::UnnecessaryNestedLiteral),
         (Ruff, "043") => (RuleGroup::Preview, rules::ruff::rules::PytestRaisesAmbiguousPattern),
         (Ruff, "045") => (RuleGroup::Preview, rules::ruff::rules::ImplicitClassVarInDataclass),
-        (Ruff, "046") => (RuleGroup::Preview, rules::ruff::rules::UnnecessaryCastToInt),
+        (Ruff, "046") => (RuleGroup::Stable, rules::ruff::rules::UnnecessaryCastToInt),
         (Ruff, "047") => (RuleGroup::Preview, rules::ruff::rules::NeedlessElse),
-        (Ruff, "048") => (RuleGroup::Preview, rules::ruff::rules::MapIntVersionParsing),
-        (Ruff, "049") => (RuleGroup::Preview, rules::ruff::rules::DataclassEnum),
-        (Ruff, "051") => (RuleGroup::Preview, rules::ruff::rules::IfKeyInDictDel),
+        (Ruff, "048") => (RuleGroup::Stable, rules::ruff::rules::MapIntVersionParsing),
+        (Ruff, "049") => (RuleGroup::Stable, rules::ruff::rules::DataclassEnum),
+        (Ruff, "051") => (RuleGroup::Stable, rules::ruff::rules::IfKeyInDictDel),
         (Ruff, "052") => (RuleGroup::Preview, rules::ruff::rules::UsedDummyVariable),
-        (Ruff, "053") => (RuleGroup::Preview, rules::ruff::rules::ClassWithMixedTypeVars),
+        (Ruff, "053") => (RuleGroup::Stable, rules::ruff::rules::ClassWithMixedTypeVars),
         (Ruff, "054") => (RuleGroup::Preview, rules::ruff::rules::IndentedFormFeed),
         (Ruff, "055") => (RuleGroup::Preview, rules::ruff::rules::UnnecessaryRegularExpression),
         (Ruff, "056") => (RuleGroup::Preview, rules::ruff::rules::FalsyDictGetFallback),
-        (Ruff, "057") => (RuleGroup::Preview, rules::ruff::rules::UnnecessaryRound),
-        (Ruff, "058") => (RuleGroup::Preview, rules::ruff::rules::StarmapZip),
+        (Ruff, "057") => (RuleGroup::Stable, rules::ruff::rules::UnnecessaryRound),
+        (Ruff, "058") => (RuleGroup::Stable, rules::ruff::rules::StarmapZip),
         (Ruff, "059") => (RuleGroup::Preview, rules::ruff::rules::UnusedUnpackedVariable),
+        (Ruff, "060") => (RuleGroup::Preview, rules::ruff::rules::InEmptyCollection),
+        (Ruff, "061") => (RuleGroup::Preview, rules::ruff::rules::LegacyFormPytestRaises),
+        (Ruff, "063") => (RuleGroup::Preview, rules::ruff::rules::AccessAnnotationsFromClassDict),
+        (Ruff, "064") => (RuleGroup::Preview, rules::ruff::rules::NonOctalPermissions),
         (Ruff, "100") => (RuleGroup::Stable, rules::ruff::rules::UnusedNOQA),
         (Ruff, "101") => (RuleGroup::Stable, rules::ruff::rules::RedirectedNOQA),
+        (Ruff, "102") => (RuleGroup::Preview, rules::ruff::rules::InvalidRuleCode),
 
         (Ruff, "200") => (RuleGroup::Stable, rules::ruff::rules::InvalidPyprojectToml),
         #[cfg(any(feature = "test-rules", test))]
@@ -1067,9 +1091,11 @@ pub fn code_to_rule(linter: Linter, code: &str) -> Option<(RuleGroup, Rule)> {
 
         // airflow
         (Airflow, "001") => (RuleGroup::Stable, rules::airflow::rules::AirflowVariableNameTaskIdMismatch),
-        (Airflow, "301") => (RuleGroup::Preview, rules::airflow::rules::AirflowDagNoScheduleArgument),
-        (Airflow, "302") => (RuleGroup::Preview, rules::airflow::rules::Airflow3Removal),
-        (Airflow, "303") => (RuleGroup::Preview, rules::airflow::rules::Airflow3MovedToProvider),
+        (Airflow, "002") => (RuleGroup::Preview, rules::airflow::rules::AirflowDagNoScheduleArgument),
+        (Airflow, "301") => (RuleGroup::Preview, rules::airflow::rules::Airflow3Removal),
+        (Airflow, "302") => (RuleGroup::Preview, rules::airflow::rules::Airflow3MovedToProvider),
+        (Airflow, "311") => (RuleGroup::Preview, rules::airflow::rules::Airflow3SuggestedUpdate),
+        (Airflow, "312") => (RuleGroup::Preview, rules::airflow::rules::Airflow3SuggestedToMoveToProvider),
 
         // perflint
         (Perflint, "101") => (RuleGroup::Stable, rules::perflint::rules::UnnecessaryListCast),
@@ -1098,10 +1124,10 @@ pub fn code_to_rule(linter: Linter, code: &str) -> Option<(RuleGroup, Rule)> {
         (Refurb, "113") => (RuleGroup::Preview, rules::refurb::rules::RepeatedAppend),
         (Refurb, "116") => (RuleGroup::Preview, rules::refurb::rules::FStringNumberFormat),
         (Refurb, "118") => (RuleGroup::Preview, rules::refurb::rules::ReimplementedOperator),
-        (Refurb, "122") => (RuleGroup::Preview, rules::refurb::rules::ForLoopWrites),
+        (Refurb, "122") => (RuleGroup::Stable, rules::refurb::rules::ForLoopWrites),
         (Refurb, "129") => (RuleGroup::Stable, rules::refurb::rules::ReadlinesInFor),
         (Refurb, "131") => (RuleGroup::Preview, rules::refurb::rules::DeleteFullSlice),
-        (Refurb, "132") => (RuleGroup::Preview, rules::refurb::rules::CheckAndRemoveFromSet),
+        (Refurb, "132") => (RuleGroup::Stable, rules::refurb::rules::CheckAndRemoveFromSet),
         (Refurb, "136") => (RuleGroup::Stable, rules::refurb::rules::IfExprMinMax),
         (Refurb, "140") => (RuleGroup::Preview, rules::refurb::rules::ReimplementedStarmap),
         (Refurb, "142") => (RuleGroup::Preview, rules::refurb::rules::ForLoopSetMutations),
@@ -1110,12 +1136,12 @@ pub fn code_to_rule(linter: Linter, code: &str) -> Option<(RuleGroup, Rule)> {
         (Refurb, "152") => (RuleGroup::Preview, rules::refurb::rules::MathConstant),
         (Refurb, "154") => (RuleGroup::Preview, rules::refurb::rules::RepeatedGlobal),
         (Refurb, "156") => (RuleGroup::Preview, rules::refurb::rules::HardcodedStringCharset),
-        (Refurb, "157") => (RuleGroup::Preview, rules::refurb::rules::VerboseDecimalConstructor),
+        (Refurb, "157") => (RuleGroup::Stable, rules::refurb::rules::VerboseDecimalConstructor),
         (Refurb, "161") => (RuleGroup::Stable, rules::refurb::rules::BitCount),
-        (Refurb, "162") => (RuleGroup::Preview, rules::refurb::rules::FromisoformatReplaceZ),
+        (Refurb, "162") => (RuleGroup::Stable, rules::refurb::rules::FromisoformatReplaceZ),
         (Refurb, "163") => (RuleGroup::Stable, rules::refurb::rules::RedundantLogBase),
         (Refurb, "164") => (RuleGroup::Preview, rules::refurb::rules::UnnecessaryFromFloat),
-        (Refurb, "166") => (RuleGroup::Preview, rules::refurb::rules::IntOnSlicedStr),
+        (Refurb, "166") => (RuleGroup::Stable, rules::refurb::rules::IntOnSlicedStr),
         (Refurb, "167") => (RuleGroup::Stable, rules::refurb::rules::RegexFlagAlias),
         (Refurb, "168") => (RuleGroup::Stable, rules::refurb::rules::IsinstanceTypeNone),
         (Refurb, "169") => (RuleGroup::Stable, rules::refurb::rules::TypeNoneComparison),
@@ -1134,9 +1160,15 @@ pub fn code_to_rule(linter: Linter, code: &str) -> Option<(RuleGroup, Rule)> {
         (Flake8Logging, "004") => (RuleGroup::Preview, rules::flake8_logging::rules::LogExceptionOutsideExceptHandler),
         (Flake8Logging, "007") => (RuleGroup::Stable, rules::flake8_logging::rules::ExceptionWithoutExcInfo),
         (Flake8Logging, "009") => (RuleGroup::Stable, rules::flake8_logging::rules::UndocumentedWarn),
-        (Flake8Logging, "014") => (RuleGroup::Preview, rules::flake8_logging::rules::ExcInfoOutsideExceptHandler),
-        (Flake8Logging, "015") => (RuleGroup::Preview, rules::flake8_logging::rules::RootLoggerCall),
+        (Flake8Logging, "014") => (RuleGroup::Stable, rules::flake8_logging::rules::ExcInfoOutsideExceptHandler),
+        (Flake8Logging, "015") => (RuleGroup::Stable, rules::flake8_logging::rules::RootLoggerCall),
 
         _ => return None,
     })
+}
+
+impl std::fmt::Display for Rule {
+    fn fmt(&self, f: &mut Formatter) -> std::fmt::Result {
+        f.write_str(self.into())
+    }
 }

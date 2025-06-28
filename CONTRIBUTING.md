@@ -2,6 +2,11 @@
 
 Welcome! We're happy to have you here. Thank you in advance for your contribution to Ruff.
 
+> [!NOTE]
+>
+> This guide is for Ruff. If you're looking to contribute to ty, please see [the ty contributing
+> guide](https://github.com/astral-sh/ruff/blob/main/crates/ty/CONTRIBUTING.md).
+
 ## The Basics
 
 Ruff welcomes contributions in the form of pull requests.
@@ -310,6 +315,17 @@ even patch releases may contain [non-backwards-compatible changes](https://semve
     - Often labels will be missing from pull requests they will need to be manually organized into the proper section
     - Changes should be edited to be user-facing descriptions, avoiding internal details
 
+    Additionally, for minor releases:
+
+    - Move the existing contents of `CHANGELOG.md` to `changelogs/0.MINOR.x.md`,
+        where `MINOR` is the previous minor release (e.g. `11` when preparing
+        the 0.12.0 release)
+    - Reverse the entries to put the oldest version first (`0.MINOR.0` instead
+        of `0.MINOR.LATEST` as in the main changelog)
+        - Use the
+            [`reverse-changelog.py`](https://github.com/astral-sh/uv/blob/main/scripts/reverse-changelog.py)
+            script from the uv repo to do this automatically
+
 1. Highlight any breaking changes in `BREAKING_CHANGES.md`
 
 1. Run `cargo check`. This should update the lock file with new versions.
@@ -366,6 +382,15 @@ uvx --from ./python/ruff-ecosystem ruff-ecosystem format ruff "./target/debug/ru
 
 See the [ruff-ecosystem package](https://github.com/astral-sh/ruff/tree/main/python/ruff-ecosystem) for more details.
 
+## Upgrading Rust
+
+1. Change the `channel` in `./rust-toolchain.toml` to the new Rust version (`<latest>`)
+1. Change the `rust-version` in the `./Cargo.toml` to `<latest> - 2` (e.g. 1.84 if the latest is 1.86)
+1. Run `cargo clippy --fix --allow-dirty --allow-staged` to fix new clippy warnings
+1. Create and merge the PR
+1. Bump the Rust version in Ruff's conda forge recipe. See [this PR](https://github.com/conda-forge/ruff-feedstock/pull/266) for an example.
+1. Enjoy the new Rust version!
+
 ## Benchmarking and Profiling
 
 We have several ways of benchmarking and profiling Ruff:
@@ -397,7 +422,7 @@ cargo install hyperfine
 To benchmark the release build:
 
 ```shell
-cargo build --release && hyperfine --warmup 10 \
+cargo build --release --bin ruff && hyperfine --warmup 10 \
   "./target/release/ruff check ./crates/ruff_linter/resources/test/cpython/ --no-cache -e" \
   "./target/release/ruff check ./crates/ruff_linter/resources/test/cpython/ -e"
 
@@ -596,8 +621,7 @@ Then convert the recorded profile
 perf script -F +pid > /tmp/test.perf
 ```
 
-You can now view the converted file with [firefox profiler](https://profiler.firefox.com/), with a
-more in-depth guide [here](https://profiler.firefox.com/docs/#/./guide-perf-profiling)
+You can now view the converted file with [firefox profiler](https://profiler.firefox.com/). To learn more about Firefox profiler, read the [Firefox profiler profiling-guide](https://profiler.firefox.com/docs/#/./guide-perf-profiling).
 
 An alternative is to convert the perf data to `flamegraph.svg` using
 [flamegraph](https://github.com/flamegraph-rs/flamegraph) (`cargo install flamegraph`):

@@ -3,10 +3,10 @@ use std::path::Path;
 
 use quick_junit::{NonSuccessKind, Report, TestCase, TestCaseStatus, TestSuite, XmlString};
 
-use ruff_source_file::SourceLocation;
+use ruff_source_file::LineColumn;
 
 use crate::message::{
-    group_messages_by_filename, Emitter, EmitterContext, Message, MessageWithLocation,
+    Emitter, EmitterContext, MessageWithLocation, OldDiagnostic, group_diagnostics_by_filename,
 };
 
 #[derive(Default)]
@@ -16,12 +16,12 @@ impl Emitter for JunitEmitter {
     fn emit(
         &mut self,
         writer: &mut dyn Write,
-        messages: &[Message],
+        diagnostics: &[OldDiagnostic],
         context: &EmitterContext,
     ) -> anyhow::Result<()> {
         let mut report = Report::new("ruff");
 
-        if messages.is_empty() {
+        if diagnostics.is_empty() {
             let mut test_suite = TestSuite::new("ruff");
             test_suite
                 .extra
@@ -31,8 +31,8 @@ impl Emitter for JunitEmitter {
             test_suite.add_test_case(case);
             report.add_test_suite(test_suite);
         } else {
-            for (filename, messages) in group_messages_by_filename(messages) {
-                let mut test_suite = TestSuite::new(filename);
+            for (filename, messages) in group_diagnostics_by_filename(diagnostics) {
+                let mut test_suite = TestSuite::new(&filename);
                 test_suite
                     .extra
                     .insert(XmlString::new("package"), XmlString::new("org.ruff"));
@@ -44,35 +44,35 @@ impl Emitter for JunitEmitter {
                     } = message;
                     let mut status = TestCaseStatus::non_success(NonSuccessKind::Failure);
                     status.set_message(message.body());
-                    let location = if context.is_notebook(message.filename()) {
+                    let location = if context.is_notebook(&message.filename()) {
                         // We can't give a reasonable location for the structured formats,
                         // so we show one that's clearly a fallback
-                        SourceLocation::default()
+                        LineColumn::default()
                     } else {
                         start_location
                     };
 
                     status.set_description(format!(
                         "line {row}, col {col}, {body}",
-                        row = location.row,
+                        row = location.line,
                         col = location.column,
                         body = message.body()
                     ));
                     let mut case = TestCase::new(
-                        if let Some(rule) = message.rule() {
-                            format!("org.ruff.{}", rule.noqa_code())
+                        if let Some(code) = message.secondary_code() {
+                            format!("org.ruff.{code}")
                         } else {
                             "org.ruff".to_string()
                         },
                         status,
                     );
-                    let file_path = Path::new(filename);
+                    let file_path = Path::new(&*filename);
                     let file_stem = file_path.file_stem().unwrap().to_str().unwrap();
                     let classname = file_path.parent().unwrap().join(file_stem);
                     case.set_classname(classname.to_str().unwrap());
                     case.extra.insert(
                         XmlString::new("line"),
-                        XmlString::new(location.row.to_string()),
+                        XmlString::new(location.line.to_string()),
                     );
                     case.extra.insert(
                         XmlString::new("column"),
@@ -95,15 +95,15 @@ impl Emitter for JunitEmitter {
 mod tests {
     use insta::assert_snapshot;
 
-    use crate::message::tests::{
-        capture_emitter_output, create_messages, create_syntax_error_messages,
-    };
     use crate::message::JunitEmitter;
+    use crate::message::tests::{
+        capture_emitter_output, create_diagnostics, create_syntax_error_diagnostics,
+    };
 
     #[test]
     fn output() {
         let mut emitter = JunitEmitter;
-        let content = capture_emitter_output(&mut emitter, &create_messages());
+        let content = capture_emitter_output(&mut emitter, &create_diagnostics());
 
         assert_snapshot!(content);
     }
@@ -111,7 +111,7 @@ mod tests {
     #[test]
     fn syntax_errors() {
         let mut emitter = JunitEmitter;
-        let content = capture_emitter_output(&mut emitter, &create_syntax_error_messages());
+        let content = capture_emitter_output(&mut emitter, &create_syntax_error_diagnostics());
 
         assert_snapshot!(content);
     }

@@ -15,9 +15,9 @@ mod tests {
 
     use crate::registry::Rule;
     use crate::rules::pyupgrade;
-    use crate::settings::types::PreviewMode;
+
     use crate::test::test_path;
-    use crate::{assert_messages, settings};
+    use crate::{assert_diagnostics, settings};
 
     #[test_case(Rule::ConvertNamedTupleFunctionalToClass, Path::new("UP014.py"))]
     #[test_case(Rule::ConvertTypedDictFunctionalToClass, Path::new("UP013.py"))]
@@ -36,12 +36,14 @@ mod tests {
     #[test_case(Rule::LRUCacheWithMaxsizeNone, Path::new("UP033_1.py"))]
     #[test_case(Rule::LRUCacheWithoutParameters, Path::new("UP011.py"))]
     #[test_case(Rule::NativeLiterals, Path::new("UP018.py"))]
+    #[test_case(Rule::NativeLiterals, Path::new("UP018_CR.py"))]
+    #[test_case(Rule::NativeLiterals, Path::new("UP018_LF.py"))]
     #[test_case(Rule::NonPEP585Annotation, Path::new("UP006_0.py"))]
     #[test_case(Rule::NonPEP585Annotation, Path::new("UP006_1.py"))]
     #[test_case(Rule::NonPEP585Annotation, Path::new("UP006_2.py"))]
     #[test_case(Rule::NonPEP585Annotation, Path::new("UP006_3.py"))]
     #[test_case(Rule::NonPEP604AnnotationUnion, Path::new("UP007.py"))]
-    #[test_case(Rule::NonPEP604AnnotationUnion, Path::new("UP045.py"))]
+    #[test_case(Rule::NonPEP604AnnotationOptional, Path::new("UP045.py"))]
     #[test_case(Rule::NonPEP604Isinstance, Path::new("UP038.py"))]
     #[test_case(Rule::OSErrorAlias, Path::new("UP024_0.py"))]
     #[test_case(Rule::OSErrorAlias, Path::new("UP024_1.py"))]
@@ -109,45 +111,14 @@ mod tests {
     #[test_case(Rule::NonPEP695GenericFunction, Path::new("UP047.py"))]
     #[test_case(Rule::PrivateTypeParameter, Path::new("UP049_0.py"))]
     #[test_case(Rule::PrivateTypeParameter, Path::new("UP049_1.py"))]
+    #[test_case(Rule::UselessClassMetaclassType, Path::new("UP050.py"))]
     fn rules(rule_code: Rule, path: &Path) -> Result<()> {
         let snapshot = path.to_string_lossy().to_string();
         let diagnostics = test_path(
             Path::new("pyupgrade").join(path).as_path(),
             &settings::LinterSettings::for_rule(rule_code),
         )?;
-        assert_messages!(snapshot, diagnostics);
-        Ok(())
-    }
-
-    #[test_case(Rule::RedundantOpenModes, Path::new("UP015.py"))]
-    #[test_case(Rule::RedundantOpenModes, Path::new("UP015_1.py"))]
-    fn preview_rules(rule_code: Rule, path: &Path) -> Result<()> {
-        let snapshot = format!(
-            "preview__{}_{}",
-            rule_code.noqa_code(),
-            path.to_string_lossy()
-        );
-        let diagnostics = test_path(
-            Path::new("pyupgrade").join(path).as_path(),
-            &settings::LinterSettings {
-                preview: PreviewMode::Enabled,
-                ..settings::LinterSettings::for_rule(rule_code)
-            },
-        )?;
-        assert_messages!(snapshot, diagnostics);
-        Ok(())
-    }
-
-    #[test]
-    fn up007_preview() -> Result<()> {
-        let diagnostics = test_path(
-            Path::new("pyupgrade/UP045.py"),
-            &settings::LinterSettings {
-                preview: PreviewMode::Enabled,
-                ..settings::LinterSettings::for_rule(Rule::NonPEP604AnnotationUnion)
-            },
-        )?;
-        assert_messages!(diagnostics);
+        assert_diagnostics!(snapshot, diagnostics);
         Ok(())
     }
 
@@ -156,11 +127,11 @@ mod tests {
         let diagnostics = test_path(
             Path::new("pyupgrade/UP041.py"),
             &settings::LinterSettings {
-                unresolved_target_version: PythonVersion::PY310,
+                unresolved_target_version: PythonVersion::PY310.into(),
                 ..settings::LinterSettings::for_rule(Rule::TimeoutErrorAlias)
             },
         )?;
-        assert_messages!(diagnostics);
+        assert_diagnostics!(diagnostics);
         Ok(())
     }
 
@@ -169,11 +140,11 @@ mod tests {
         let diagnostics = test_path(
             Path::new("pyupgrade/UP040.py"),
             &settings::LinterSettings {
-                unresolved_target_version: PythonVersion::PY311,
+                unresolved_target_version: PythonVersion::PY311.into(),
                 ..settings::LinterSettings::for_rule(Rule::NonPEP695TypeAlias)
             },
         )?;
-        assert_messages!(diagnostics);
+        assert_diagnostics!(diagnostics);
         Ok(())
     }
 
@@ -185,11 +156,11 @@ mod tests {
                 pyupgrade: pyupgrade::settings::Settings {
                     keep_runtime_typing: true,
                 },
-                unresolved_target_version: PythonVersion::PY37,
+                unresolved_target_version: PythonVersion::PY37.into(),
                 ..settings::LinterSettings::for_rule(Rule::NonPEP585Annotation)
             },
         )?;
-        assert_messages!(diagnostics);
+        assert_diagnostics!(diagnostics);
         Ok(())
     }
 
@@ -201,11 +172,11 @@ mod tests {
                 pyupgrade: pyupgrade::settings::Settings {
                     keep_runtime_typing: true,
                 },
-                unresolved_target_version: PythonVersion::PY310,
+                unresolved_target_version: PythonVersion::PY310.into(),
                 ..settings::LinterSettings::for_rule(Rule::NonPEP585Annotation)
             },
         )?;
-        assert_messages!(diagnostics);
+        assert_diagnostics!(diagnostics);
         Ok(())
     }
 
@@ -214,11 +185,11 @@ mod tests {
         let diagnostics = test_path(
             Path::new("pyupgrade/future_annotations.py"),
             &settings::LinterSettings {
-                unresolved_target_version: PythonVersion::PY37,
+                unresolved_target_version: PythonVersion::PY37.into(),
                 ..settings::LinterSettings::for_rule(Rule::NonPEP585Annotation)
             },
         )?;
-        assert_messages!(diagnostics);
+        assert_diagnostics!(diagnostics);
         Ok(())
     }
 
@@ -227,11 +198,11 @@ mod tests {
         let diagnostics = test_path(
             Path::new("pyupgrade/future_annotations.py"),
             &settings::LinterSettings {
-                unresolved_target_version: PythonVersion::PY310,
+                unresolved_target_version: PythonVersion::PY310.into(),
                 ..settings::LinterSettings::for_rule(Rule::NonPEP585Annotation)
             },
         )?;
-        assert_messages!(diagnostics);
+        assert_diagnostics!(diagnostics);
         Ok(())
     }
 
@@ -240,14 +211,14 @@ mod tests {
         let diagnostics = test_path(
             Path::new("pyupgrade/future_annotations.py"),
             &settings::LinterSettings {
-                unresolved_target_version: PythonVersion::PY37,
+                unresolved_target_version: PythonVersion::PY37.into(),
                 ..settings::LinterSettings::for_rules([
                     Rule::NonPEP604AnnotationUnion,
                     Rule::NonPEP604AnnotationOptional,
                 ])
             },
         )?;
-        assert_messages!(diagnostics);
+        assert_diagnostics!(diagnostics);
         Ok(())
     }
 
@@ -256,14 +227,14 @@ mod tests {
         let diagnostics = test_path(
             Path::new("pyupgrade/future_annotations.py"),
             &settings::LinterSettings {
-                unresolved_target_version: PythonVersion::PY310,
+                unresolved_target_version: PythonVersion::PY310.into(),
                 ..settings::LinterSettings::for_rules([
                     Rule::NonPEP604AnnotationUnion,
                     Rule::NonPEP604AnnotationOptional,
                 ])
             },
         )?;
-        assert_messages!(diagnostics);
+        assert_diagnostics!(diagnostics);
         Ok(())
     }
 
@@ -272,11 +243,11 @@ mod tests {
         let diagnostics = test_path(
             Path::new("pyupgrade/UP017.py"),
             &settings::LinterSettings {
-                unresolved_target_version: PythonVersion::PY311,
+                unresolved_target_version: PythonVersion::PY311.into(),
                 ..settings::LinterSettings::for_rule(Rule::DatetimeTimezoneUTC)
             },
         )?;
-        assert_messages!(diagnostics);
+        assert_diagnostics!(diagnostics);
         Ok(())
     }
 
@@ -285,12 +256,11 @@ mod tests {
         let diagnostics = test_path(
             Path::new("pyupgrade/UP044.py"),
             &settings::LinterSettings {
-                preview: PreviewMode::Enabled,
-                unresolved_target_version: PythonVersion::PY311,
+                unresolved_target_version: PythonVersion::PY311.into(),
                 ..settings::LinterSettings::for_rule(Rule::NonPEP646Unpack)
             },
         )?;
-        assert_messages!(diagnostics);
+        assert_diagnostics!(diagnostics);
         Ok(())
     }
 }

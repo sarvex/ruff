@@ -32,7 +32,7 @@
 //!
 //! The above snippet has been built out of the following structure:
 use crate::snippet;
-use std::cmp::{max, min, Reverse};
+use std::cmp::{Reverse, max, min};
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::ops::Range;
@@ -41,7 +41,7 @@ use std::{cmp, fmt};
 use unicode_width::UnicodeWidthStr;
 
 use crate::renderer::styled_buffer::StyledBuffer;
-use crate::renderer::{stylesheet::Stylesheet, Margin, Style, DEFAULT_TERM_WIDTH};
+use crate::renderer::{DEFAULT_TERM_WIDTH, Margin, Style, stylesheet::Stylesheet};
 
 const ANONYMIZED_LINE_NUM: &str = "LL";
 const ERROR_TXT: &str = "error";
@@ -315,7 +315,7 @@ impl DisplaySet<'_> {
                         None => {
                             buffer.putc(line_offset, lineno_width + 1, '|', *lineno_color);
                         }
-                    };
+                    }
                 }
                 if let DisplaySourceLine::Content { text, .. } = line {
                     // The width of the line number, a space, pipe, and a space
@@ -352,7 +352,7 @@ impl DisplaySet<'_> {
                         // FIXME: `unicode_width` sometimes disagrees with terminals on how wide a `char`
                         // is. For now, just accept that sometimes the code line will be longer than
                         // desired.
-                        let next = unicode_width::UnicodeWidthChar::width(ch).unwrap_or(1);
+                        let next = char_width(ch).unwrap_or(1);
                         if taken + next > right - left {
                             was_cut_right = true;
                             break;
@@ -377,7 +377,7 @@ impl DisplaySet<'_> {
                     let left: usize = text
                         .chars()
                         .take(left)
-                        .map(|ch| unicode_width::UnicodeWidthChar::width(ch).unwrap_or(1))
+                        .map(|ch| char_width(ch).unwrap_or(1))
                         .sum();
 
                     let mut annotations = annotations.clone();
@@ -474,7 +474,7 @@ impl DisplaySet<'_> {
                             // 3 │       X0 Y0 Z0
                             //   │ ┏━━━━━┛  │  │     < We are writing these lines
                             //   │ ┃┌───────┘  │     < by reverting the "depth" of
-                            //   │ ┃│┌─────────┘     < their multilne spans.
+                            //   │ ┃│┌─────────┘     < their multiline spans.
                             // 4 │ ┃││   X1 Y1 Z1
                             // 5 │ ┃││   X2 Y2 Z2
                             //   │ ┃│└────╿──│──┘ `Z` label
@@ -937,7 +937,7 @@ impl From<snippet::Level> for DisplayAnnotationType {
     }
 }
 
-/// Information whether the header is the initial one or a consequitive one
+/// Information whether the header is the initial one or a consecutive one
 /// for multi-slice cases.
 // TODO: private
 #[derive(Debug, Clone, PartialEq)]
@@ -1273,10 +1273,7 @@ fn fold_body(body: Vec<DisplayLine<'_>>) -> Vec<DisplayLine<'_>> {
                             let inline_marks = lines
                                 .last()
                                 .and_then(|line| {
-                                    if let DisplayLine::Source {
-                                        ref inline_marks, ..
-                                    } = line
-                                    {
+                                    if let DisplayLine::Source { inline_marks, .. } = line {
                                         let inline_marks = inline_marks.clone();
                                         Some(inline_marks)
                                     } else {
@@ -1396,6 +1393,7 @@ fn format_body<'m>(
         let line_length: usize = line.len();
         let line_range = (current_index, current_index + line_length);
         let end_line_size = end_line.len();
+
         body.push(DisplayLine::Source {
             lineno: Some(current_line),
             inline_marks: vec![],
@@ -1455,12 +1453,12 @@ fn format_body<'m>(
                         let annotation_start_col = line
                             [0..(start - line_start_index).min(line_length)]
                             .chars()
-                            .map(|c| unicode_width::UnicodeWidthChar::width(c).unwrap_or(0))
+                            .map(|c| char_width(c).unwrap_or(0))
                             .sum::<usize>();
                         let mut annotation_end_col = line
                             [0..(end - line_start_index).min(line_length)]
                             .chars()
-                            .map(|c| unicode_width::UnicodeWidthChar::width(c).unwrap_or(0))
+                            .map(|c| char_width(c).unwrap_or(0))
                             .sum::<usize>();
                         if annotation_start_col == annotation_end_col {
                             // At least highlight something
@@ -1502,7 +1500,7 @@ fn format_body<'m>(
                         let annotation_start_col = line
                             [0..(start - line_start_index).min(line_length)]
                             .chars()
-                            .map(|c| unicode_width::UnicodeWidthChar::width(c).unwrap_or(0))
+                            .map(|c| char_width(c).unwrap_or(0))
                             .sum::<usize>();
                         let annotation_end_col = annotation_start_col + 1;
 
@@ -1561,7 +1559,7 @@ fn format_body<'m>(
                     {
                         let end_mark = line[0..(end - line_start_index).min(line_length)]
                             .chars()
-                            .map(|c| unicode_width::UnicodeWidthChar::width(c).unwrap_or(0))
+                            .map(|c| char_width(c).unwrap_or(0))
                             .sum::<usize>()
                             .saturating_sub(1);
                         // If the annotation ends on a line-end character, we
@@ -1753,7 +1751,15 @@ fn format_inline_marks(
             DisplayMarkType::AnnotationThrough(depth) => {
                 buf.putc(line, 3 + lineno_width + depth, '|', *annotation_style);
             }
-        };
+        }
     }
     Ok(())
+}
+
+fn char_width(c: char) -> Option<usize> {
+    if c == '\t' {
+        Some(4)
+    } else {
+        unicode_width::UnicodeWidthChar::width(c)
+    }
 }

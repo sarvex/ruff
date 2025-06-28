@@ -1,8 +1,9 @@
 #![allow(clippy::derive_partial_eq_without_eq)]
 
+use crate::AtomicNodeIndex;
 use crate::generated::{
     ExprBytesLiteral, ExprDict, ExprFString, ExprList, ExprName, ExprSet, ExprStringLiteral,
-    ExprTuple,
+    ExprTString, ExprTuple, StmtClassDef,
 };
 use std::borrow::Cow;
 use std::fmt;
@@ -17,117 +18,15 @@ use itertools::Itertools;
 
 use ruff_text_size::{Ranged, TextLen, TextRange, TextSize};
 
+use crate::str_prefix::{
+    AnyStringPrefix, ByteStringPrefix, FStringPrefix, StringLiteralPrefix, TStringPrefix,
+};
 use crate::{
-    int,
+    Expr, ExprRef, InterpolatedStringElement, LiteralExpressionRef, OperatorPrecedence, Pattern,
+    Stmt, TypeParam, int,
     name::Name,
     str::{Quote, TripleQuotes},
-    str_prefix::{AnyStringPrefix, ByteStringPrefix, FStringPrefix, StringLiteralPrefix},
-    ExceptHandler, Expr, ExprRef, FStringElement, LiteralExpressionRef, OperatorPrecedence,
-    Pattern, Stmt, TypeParam,
 };
-
-/// See also [Module](https://docs.python.org/3/library/ast.html#ast.Module)
-#[derive(Clone, Debug, PartialEq)]
-pub struct ModModule {
-    pub range: TextRange,
-    pub body: Vec<Stmt>,
-}
-
-/// See also [Expression](https://docs.python.org/3/library/ast.html#ast.Expression)
-#[derive(Clone, Debug, PartialEq)]
-pub struct ModExpression {
-    pub range: TextRange,
-    pub body: Box<Expr>,
-}
-
-/// An AST node used to represent a IPython escape command at the statement level.
-///
-/// For example,
-/// ```python
-/// %matplotlib inline
-/// ```
-///
-/// ## Terminology
-///
-/// Escape commands are special IPython syntax which starts with a token to identify
-/// the escape kind followed by the command value itself. [Escape kind] are the kind
-/// of escape commands that are recognized by the token: `%`, `%%`, `!`, `!!`,
-/// `?`, `??`, `/`, `;`, and `,`.
-///
-/// Help command (or Dynamic Object Introspection as it's called) are the escape commands
-/// of the kind `?` and `??`. For example, `?str.replace`. Help end command are a subset
-/// of Help command where the token can be at the end of the line i.e., after the value.
-/// For example, `str.replace?`.
-///
-/// Here's where things get tricky. I'll divide the help end command into two types for
-/// better understanding:
-/// 1. Strict version: The token is _only_ at the end of the line. For example,
-///    `str.replace?` or `str.replace??`.
-/// 2. Combined version: Along with the `?` or `??` token, which are at the end of the
-///    line, there are other escape kind tokens that are present at the start as well.
-///    For example, `%matplotlib?` or `%%timeit?`.
-///
-/// Priority comes into picture for the "Combined version" mentioned above. How do
-/// we determine the escape kind if there are tokens on both side of the value, i.e., which
-/// token to choose? The Help end command always takes priority over any other token which
-/// means that if there is `?`/`??` at the end then that is used to determine the kind.
-/// For example, in `%matplotlib?` the escape kind is determined using the `?` token
-/// instead of `%` token.
-///
-/// ## Syntax
-///
-/// `<IpyEscapeKind><Command value>`
-///
-/// The simplest form is an escape kind token followed by the command value. For example,
-/// `%matplotlib inline`, `/foo`, `!pwd`, etc.
-///
-/// `<Command value><IpyEscapeKind ("?" or "??")>`
-///
-/// The help end escape command would be the reverse of the above syntax. Here, the
-/// escape kind token can only be either `?` or `??` and it is at the end of the line.
-/// For example, `str.replace?`, `math.pi??`, etc.
-///
-/// `<IpyEscapeKind><Command value><EscapeKind ("?" or "??")>`
-///
-/// The final syntax is the combined version of the above two. For example, `%matplotlib?`,
-/// `%%timeit??`, etc.
-///
-/// [Escape kind]: IpyEscapeKind
-#[derive(Clone, Debug, PartialEq)]
-pub struct StmtIpyEscapeCommand {
-    pub range: TextRange,
-    pub kind: IpyEscapeKind,
-    pub value: Box<str>,
-}
-
-/// See also [FunctionDef](https://docs.python.org/3/library/ast.html#ast.FunctionDef) and
-/// [AsyncFunctionDef](https://docs.python.org/3/library/ast.html#ast.AsyncFunctionDef).
-///
-/// This type differs from the original Python AST, as it collapses the
-/// synchronous and asynchronous variants into a single type.
-#[derive(Clone, Debug, PartialEq)]
-pub struct StmtFunctionDef {
-    pub range: TextRange,
-    pub is_async: bool,
-    pub decorator_list: Vec<Decorator>,
-    pub name: Identifier,
-    pub type_params: Option<Box<TypeParams>>,
-    pub parameters: Box<Parameters>,
-    pub returns: Option<Box<Expr>>,
-    pub body: Vec<Stmt>,
-}
-
-/// See also [ClassDef](https://docs.python.org/3/library/ast.html#ast.ClassDef)
-#[derive(Clone, Debug, PartialEq)]
-pub struct StmtClassDef {
-    pub range: TextRange,
-    pub decorator_list: Vec<Decorator>,
-    pub name: Identifier,
-    pub type_params: Option<Box<TypeParams>>,
-    // TODO: can remove?
-    pub arguments: Option<Box<Arguments>>,
-    pub body: Vec<Stmt>,
-}
 
 impl StmtClassDef {
     /// Return an iterator over the bases of the class.
@@ -147,199 +46,13 @@ impl StmtClassDef {
     }
 }
 
-/// See also [Return](https://docs.python.org/3/library/ast.html#ast.Return)
 #[derive(Clone, Debug, PartialEq)]
-pub struct StmtReturn {
-    pub range: TextRange,
-    pub value: Option<Box<Expr>>,
-}
-
-/// See also [Delete](https://docs.python.org/3/library/ast.html#ast.Delete)
-#[derive(Clone, Debug, PartialEq)]
-pub struct StmtDelete {
-    pub range: TextRange,
-    pub targets: Vec<Expr>,
-}
-
-/// See also [TypeAlias](https://docs.python.org/3/library/ast.html#ast.TypeAlias)
-#[derive(Clone, Debug, PartialEq)]
-pub struct StmtTypeAlias {
-    pub range: TextRange,
-    pub name: Box<Expr>,
-    pub type_params: Option<TypeParams>,
-    pub value: Box<Expr>,
-}
-
-/// See also [Assign](https://docs.python.org/3/library/ast.html#ast.Assign)
-#[derive(Clone, Debug, PartialEq)]
-pub struct StmtAssign {
-    pub range: TextRange,
-    pub targets: Vec<Expr>,
-    pub value: Box<Expr>,
-}
-
-/// See also [AugAssign](https://docs.python.org/3/library/ast.html#ast.AugAssign)
-#[derive(Clone, Debug, PartialEq)]
-pub struct StmtAugAssign {
-    pub range: TextRange,
-    pub target: Box<Expr>,
-    pub op: Operator,
-    pub value: Box<Expr>,
-}
-
-/// See also [AnnAssign](https://docs.python.org/3/library/ast.html#ast.AnnAssign)
-#[derive(Clone, Debug, PartialEq)]
-pub struct StmtAnnAssign {
-    pub range: TextRange,
-    pub target: Box<Expr>,
-    pub annotation: Box<Expr>,
-    pub value: Option<Box<Expr>>,
-    pub simple: bool,
-}
-
-/// See also [For](https://docs.python.org/3/library/ast.html#ast.For) and
-/// [AsyncFor](https://docs.python.org/3/library/ast.html#ast.AsyncFor).
-///
-/// This type differs from the original Python AST, as it collapses the
-/// synchronous and asynchronous variants into a single type.
-#[derive(Clone, Debug, PartialEq)]
-pub struct StmtFor {
-    pub range: TextRange,
-    pub is_async: bool,
-    pub target: Box<Expr>,
-    pub iter: Box<Expr>,
-    pub body: Vec<Stmt>,
-    pub orelse: Vec<Stmt>,
-}
-
-/// See also [While](https://docs.python.org/3/library/ast.html#ast.While) and
-/// [AsyncWhile](https://docs.python.org/3/library/ast.html#ast.AsyncWhile).
-#[derive(Clone, Debug, PartialEq)]
-pub struct StmtWhile {
-    pub range: TextRange,
-    pub test: Box<Expr>,
-    pub body: Vec<Stmt>,
-    pub orelse: Vec<Stmt>,
-}
-
-/// See also [If](https://docs.python.org/3/library/ast.html#ast.If)
-#[derive(Clone, Debug, PartialEq)]
-pub struct StmtIf {
-    pub range: TextRange,
-    pub test: Box<Expr>,
-    pub body: Vec<Stmt>,
-    pub elif_else_clauses: Vec<ElifElseClause>,
-}
-
-#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "get-size", derive(get_size2::GetSize))]
 pub struct ElifElseClause {
     pub range: TextRange,
+    pub node_index: AtomicNodeIndex,
     pub test: Option<Expr>,
     pub body: Vec<Stmt>,
-}
-
-/// See also [With](https://docs.python.org/3/library/ast.html#ast.With) and
-/// [AsyncWith](https://docs.python.org/3/library/ast.html#ast.AsyncWith).
-///
-/// This type differs from the original Python AST, as it collapses the
-/// synchronous and asynchronous variants into a single type.
-#[derive(Clone, Debug, PartialEq)]
-pub struct StmtWith {
-    pub range: TextRange,
-    pub is_async: bool,
-    pub items: Vec<WithItem>,
-    pub body: Vec<Stmt>,
-}
-
-/// See also [Match](https://docs.python.org/3/library/ast.html#ast.Match)
-#[derive(Clone, Debug, PartialEq)]
-pub struct StmtMatch {
-    pub range: TextRange,
-    pub subject: Box<Expr>,
-    pub cases: Vec<MatchCase>,
-}
-
-/// See also [Raise](https://docs.python.org/3/library/ast.html#ast.Raise)
-#[derive(Clone, Debug, PartialEq)]
-pub struct StmtRaise {
-    pub range: TextRange,
-    pub exc: Option<Box<Expr>>,
-    pub cause: Option<Box<Expr>>,
-}
-
-/// See also [Try](https://docs.python.org/3/library/ast.html#ast.Try) and
-/// [TryStar](https://docs.python.org/3/library/ast.html#ast.TryStar)
-#[derive(Clone, Debug, PartialEq)]
-pub struct StmtTry {
-    pub range: TextRange,
-    pub body: Vec<Stmt>,
-    pub handlers: Vec<ExceptHandler>,
-    pub orelse: Vec<Stmt>,
-    pub finalbody: Vec<Stmt>,
-    pub is_star: bool,
-}
-
-/// See also [Assert](https://docs.python.org/3/library/ast.html#ast.Assert)
-#[derive(Clone, Debug, PartialEq)]
-pub struct StmtAssert {
-    pub range: TextRange,
-    pub test: Box<Expr>,
-    pub msg: Option<Box<Expr>>,
-}
-
-/// See also [Import](https://docs.python.org/3/library/ast.html#ast.Import)
-#[derive(Clone, Debug, PartialEq)]
-pub struct StmtImport {
-    pub range: TextRange,
-    pub names: Vec<Alias>,
-}
-
-/// See also [ImportFrom](https://docs.python.org/3/library/ast.html#ast.ImportFrom)
-#[derive(Clone, Debug, PartialEq)]
-pub struct StmtImportFrom {
-    pub range: TextRange,
-    pub module: Option<Identifier>,
-    pub names: Vec<Alias>,
-    pub level: u32,
-}
-
-/// See also [Global](https://docs.python.org/3/library/ast.html#ast.Global)
-#[derive(Clone, Debug, PartialEq)]
-pub struct StmtGlobal {
-    pub range: TextRange,
-    pub names: Vec<Identifier>,
-}
-
-/// See also [Nonlocal](https://docs.python.org/3/library/ast.html#ast.Nonlocal)
-#[derive(Clone, Debug, PartialEq)]
-pub struct StmtNonlocal {
-    pub range: TextRange,
-    pub names: Vec<Identifier>,
-}
-
-/// See also [Expr](https://docs.python.org/3/library/ast.html#ast.Expr)
-#[derive(Clone, Debug, PartialEq)]
-pub struct StmtExpr {
-    pub range: TextRange,
-    pub value: Box<Expr>,
-}
-
-/// See also [Pass](https://docs.python.org/3/library/ast.html#ast.Pass)
-#[derive(Clone, Debug, PartialEq)]
-pub struct StmtPass {
-    pub range: TextRange,
-}
-
-/// See also [Break](https://docs.python.org/3/library/ast.html#ast.Break)
-#[derive(Clone, Debug, PartialEq)]
-pub struct StmtBreak {
-    pub range: TextRange,
-}
-
-/// See also [Continue](https://docs.python.org/3/library/ast.html#ast.Continue)
-#[derive(Clone, Debug, PartialEq)]
-pub struct StmtContinue {
-    pub range: TextRange,
 }
 
 impl Expr {
@@ -379,6 +92,19 @@ impl Expr {
 }
 
 impl ExprRef<'_> {
+    /// See [`Expr::is_literal_expr`].
+    pub fn is_literal_expr(&self) -> bool {
+        matches!(
+            self,
+            ExprRef::StringLiteral(_)
+                | ExprRef::BytesLiteral(_)
+                | ExprRef::NumberLiteral(_)
+                | ExprRef::BooleanLiteral(_)
+                | ExprRef::NoneLiteral(_)
+                | ExprRef::EllipsisLiteral(_)
+        )
+    }
+
     pub fn precedence(&self) -> OperatorPrecedence {
         OperatorPrecedence::from(self)
     }
@@ -408,6 +134,7 @@ impl ExprRef<'_> {
 ///
 /// [1]: https://docs.python.org/3/reference/expressions.html#displays-for-lists-sets-and-dictionaries
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(feature = "get-size", derive(get_size2::GetSize))]
 pub struct DictItem {
     pub key: Option<Expr>,
     pub value: Expr,
@@ -591,35 +318,41 @@ impl<'a> IntoIterator for &'a ExprSet {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct FStringFormatSpec {
+#[cfg_attr(feature = "get-size", derive(get_size2::GetSize))]
+pub struct InterpolatedStringFormatSpec {
     pub range: TextRange,
-    pub elements: FStringElements,
+    pub node_index: AtomicNodeIndex,
+    pub elements: InterpolatedStringElements,
 }
 
 /// See also [FormattedValue](https://docs.python.org/3/library/ast.html#ast.FormattedValue)
 #[derive(Clone, Debug, PartialEq)]
-pub struct FStringExpressionElement {
+#[cfg_attr(feature = "get-size", derive(get_size2::GetSize))]
+pub struct InterpolatedElement {
     pub range: TextRange,
+    pub node_index: AtomicNodeIndex,
     pub expression: Box<Expr>,
     pub debug_text: Option<DebugText>,
     pub conversion: ConversionFlag,
-    pub format_spec: Option<Box<FStringFormatSpec>>,
+    pub format_spec: Option<Box<InterpolatedStringFormatSpec>>,
 }
 
 /// An `FStringLiteralElement` with an empty `value` is an invalid f-string element.
 #[derive(Clone, Debug, PartialEq)]
-pub struct FStringLiteralElement {
+#[cfg_attr(feature = "get-size", derive(get_size2::GetSize))]
+pub struct InterpolatedStringLiteralElement {
     pub range: TextRange,
+    pub node_index: AtomicNodeIndex,
     pub value: Box<str>,
 }
 
-impl FStringLiteralElement {
+impl InterpolatedStringLiteralElement {
     pub fn is_valid(&self) -> bool {
         !self.value.is_empty()
     }
 }
 
-impl Deref for FStringLiteralElement {
+impl Deref for InterpolatedStringLiteralElement {
     type Target = str;
 
     fn deref(&self) -> &Self::Target {
@@ -629,8 +362,9 @@ impl Deref for FStringLiteralElement {
 
 /// Transforms a value prior to formatting it.
 #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq, is_macro::Is)]
+#[cfg_attr(feature = "get-size", derive(get_size2::GetSize))]
 #[repr(i8)]
-#[allow(clippy::cast_possible_wrap)]
+#[expect(clippy::cast_possible_wrap)]
 pub enum ConversionFlag {
     /// No conversion
     None = -1, // CPython uses -1
@@ -655,6 +389,7 @@ impl ConversionFlag {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "get-size", derive(get_size2::GetSize))]
 pub struct DebugText {
     /// The text between the `{` and the expression node.
     pub leading: String,
@@ -675,6 +410,7 @@ impl ExprFString {
 
 /// The value representing an [`ExprFString`].
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "get-size", derive(get_size2::GetSize))]
 pub struct FStringValue {
     inner: FStringValueInner,
 }
@@ -762,7 +498,7 @@ impl FStringValue {
         self.iter().filter_map(|part| part.as_f_string())
     }
 
-    /// Returns an iterator over all the [`FStringElement`] contained in this value.
+    /// Returns an iterator over all the [`InterpolatedStringElement`] contained in this value.
     ///
     /// An f-string element is what makes up an [`FString`] i.e., it is either a
     /// string literal or an expression. In the following example,
@@ -773,8 +509,22 @@ impl FStringValue {
     ///
     /// The f-string elements returned would be string literal (`"bar "`),
     /// expression (`x`) and string literal (`"qux"`).
-    pub fn elements(&self) -> impl Iterator<Item = &FStringElement> {
+    pub fn elements(&self) -> impl Iterator<Item = &InterpolatedStringElement> {
         self.f_strings().flat_map(|fstring| fstring.elements.iter())
+    }
+
+    /// Returns `true` if the node represents an empty f-string literal.
+    ///
+    /// Noteh that a [`FStringValue`] node will always have >= 1 [`FStringPart`]s inside it.
+    /// This method checks whether the value of the concatenated parts is equal to the empty
+    /// f-string, not whether the f-string has 0 parts inside it.
+    pub fn is_empty_literal(&self) -> bool {
+        match &self.inner {
+            FStringValueInner::Single(fstring_part) => fstring_part.is_empty_literal(),
+            FStringValueInner::Concatenated(fstring_parts) => {
+                fstring_parts.iter().all(FStringPart::is_empty_literal)
+            }
+        }
     }
 }
 
@@ -797,6 +547,7 @@ impl<'a> IntoIterator for &'a mut FStringValue {
 
 /// An internal representation of [`FStringValue`].
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "get-size", derive(get_size2::GetSize))]
 enum FStringValueInner {
     /// A single f-string i.e., `f"foo"`.
     ///
@@ -810,6 +561,7 @@ enum FStringValueInner {
 
 /// An f-string part which is either a string literal or an f-string.
 #[derive(Clone, Debug, PartialEq, is_macro::Is)]
+#[cfg_attr(feature = "get-size", derive(get_size2::GetSize))]
 pub enum FStringPart {
     Literal(StringLiteral),
     FString(FString),
@@ -822,6 +574,13 @@ impl FStringPart {
             Self::FString(f_string) => f_string.flags.quote_style(),
         }
     }
+
+    pub fn is_empty_literal(&self) -> bool {
+        match &self {
+            FStringPart::Literal(string_literal) => string_literal.value.is_empty(),
+            FStringPart::FString(f_string) => f_string.elements.is_empty(),
+        }
+    }
 }
 
 impl Ranged for FStringPart {
@@ -829,6 +588,184 @@ impl Ranged for FStringPart {
         match self {
             FStringPart::Literal(string_literal) => string_literal.range(),
             FStringPart::FString(f_string) => f_string.range(),
+        }
+    }
+}
+
+impl ExprTString {
+    /// Returns the single [`TString`] if the t-string isn't implicitly concatenated, [`None`]
+    /// otherwise.
+    pub const fn as_single_part_tstring(&self) -> Option<&TString> {
+        match &self.value.inner {
+            TStringValueInner::Single(TStringPart::TString(tstring)) => Some(tstring),
+            _ => None,
+        }
+    }
+}
+
+/// The value representing an [`ExprTString`].
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "get-size", derive(get_size2::GetSize))]
+pub struct TStringValue {
+    inner: TStringValueInner,
+}
+
+impl TStringValue {
+    /// Creates a new t-string literal with a single [`TString`] part.
+    pub fn single(value: TString) -> Self {
+        Self {
+            inner: TStringValueInner::Single(TStringPart::TString(value)),
+        }
+    }
+
+    /// Creates a new t-string with the given values that represents an implicitly
+    /// concatenated t-string.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `values` has less than 2 elements.
+    /// Use [`TStringValue::single`] instead.
+    pub fn concatenated(values: Vec<TStringPart>) -> Self {
+        assert!(
+            values.len() > 1,
+            "Use `TStringValue::single` to create single-part t-strings"
+        );
+        Self {
+            inner: TStringValueInner::Concatenated(values),
+        }
+    }
+
+    /// Returns `true` if the t-string is implicitly concatenated, `false` otherwise.
+    pub fn is_implicit_concatenated(&self) -> bool {
+        matches!(self.inner, TStringValueInner::Concatenated(_))
+    }
+
+    /// Returns a slice of all the [`TStringPart`]s contained in this value.
+    pub fn as_slice(&self) -> &[TStringPart] {
+        match &self.inner {
+            TStringValueInner::Single(part) => std::slice::from_ref(part),
+            TStringValueInner::Concatenated(parts) => parts,
+        }
+    }
+
+    /// Returns a mutable slice of all the [`TStringPart`]s contained in this value.
+    fn as_mut_slice(&mut self) -> &mut [TStringPart] {
+        match &mut self.inner {
+            TStringValueInner::Single(part) => std::slice::from_mut(part),
+            TStringValueInner::Concatenated(parts) => parts,
+        }
+    }
+
+    /// Returns an iterator over all the [`TStringPart`]s contained in this value.
+    pub fn iter(&self) -> Iter<TStringPart> {
+        self.as_slice().iter()
+    }
+
+    /// Returns an iterator over all the [`TStringPart`]s contained in this value
+    /// that allows modification.
+    pub fn iter_mut(&mut self) -> IterMut<TStringPart> {
+        self.as_mut_slice().iter_mut()
+    }
+
+    /// Returns an iterator over the [`StringLiteral`] parts contained in this value.
+    ///
+    /// Note that this doesn't recurse into the t-string parts. For example,
+    ///
+    /// ```python
+    /// "foo" t"bar {x}" "baz" t"qux"
+    /// ```
+    ///
+    /// Here, the string literal parts returned would be `"foo"` and `"baz"`.
+    pub fn literals(&self) -> impl Iterator<Item = &StringLiteral> {
+        self.iter().filter_map(|part| part.as_literal())
+    }
+
+    /// Returns an iterator over the [`TString`] parts contained in this value.
+    ///
+    /// Note that this doesn't recurse into the t-string parts. For example,
+    ///
+    /// ```python
+    /// "foo" t"bar {x}" "baz" t"qux"
+    /// ```
+    ///
+    /// Here, the t-string parts returned would be `f"bar {x}"` and `f"qux"`.
+    pub fn t_strings(&self) -> impl Iterator<Item = &TString> {
+        self.iter().filter_map(|part| part.as_t_string())
+    }
+
+    /// Returns an iterator over all the [`InterpolatedStringElement`] contained in this value.
+    ///
+    /// An t-string element is what makes up an [`TString`] i.e., it is either a
+    /// string literal or an interpolation. In the following example,
+    ///
+    /// ```python
+    /// "foo" t"bar {x}" "baz" t"qux"
+    /// ```
+    ///
+    /// The t-string elements returned would be string literal (`"bar "`),
+    /// interpolation (`x`) and string literal (`"qux"`).
+    pub fn elements(&self) -> impl Iterator<Item = &InterpolatedStringElement> {
+        self.t_strings().flat_map(|fstring| fstring.elements.iter())
+    }
+}
+
+impl<'a> IntoIterator for &'a TStringValue {
+    type Item = &'a TStringPart;
+    type IntoIter = Iter<'a, TStringPart>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter()
+    }
+}
+
+impl<'a> IntoIterator for &'a mut TStringValue {
+    type Item = &'a mut TStringPart;
+    type IntoIter = IterMut<'a, TStringPart>;
+    fn into_iter(self) -> Self::IntoIter {
+        self.iter_mut()
+    }
+}
+
+/// An internal representation of [`TStringValue`].
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "get-size", derive(get_size2::GetSize))]
+enum TStringValueInner {
+    /// A single t-string i.e., `t"foo"`.
+    ///
+    /// This is always going to be `TStringPart::TString` variant which is
+    /// maintained by the `TStringValue::single` constructor.
+    Single(TStringPart),
+
+    /// An implicitly concatenated t-string i.e., `"foo" t"bar {x}"`.
+    Concatenated(Vec<TStringPart>),
+}
+
+/// An t-string part which is either a string literal, an f-string,
+/// or a t-string.
+#[derive(Clone, Debug, PartialEq, is_macro::Is)]
+#[cfg_attr(feature = "get-size", derive(get_size2::GetSize))]
+pub enum TStringPart {
+    Literal(StringLiteral),
+    FString(FString),
+    TString(TString),
+}
+
+impl TStringPart {
+    pub fn quote_style(&self) -> Quote {
+        match self {
+            Self::Literal(string_literal) => string_literal.flags.quote_style(),
+            Self::FString(f_string) => f_string.flags.quote_style(),
+            Self::TString(t_string) => t_string.flags.quote_style(),
+        }
+    }
+}
+
+impl Ranged for TStringPart {
+    fn range(&self) -> TextRange {
+        match self {
+            TStringPart::Literal(string_literal) => string_literal.range(),
+            TStringPart::FString(f_string) => f_string.range(),
+            TStringPart::TString(t_string) => t_string.range(),
         }
     }
 }
@@ -914,7 +851,7 @@ impl std::fmt::Display for DisplayFlags<'_> {
 
 bitflags! {
     #[derive(Default, Copy, Clone, PartialEq, Eq, Hash)]
-    struct FStringFlagsInner: u8 {
+    struct InterpolatedStringFlagsInner: u8 {
         /// The f-string uses double quotes (`"`) for its opener and closer.
         /// If this flag is not set, the f-string uses single quotes (`'`)
         /// for its opener and closer.
@@ -938,8 +875,15 @@ bitflags! {
     }
 }
 
+impl get_size2::GetSize for InterpolatedStringFlagsInner {}
+
 /// Flags that can be queried to obtain information
 /// regarding the prefixes and quotes used for an f-string.
+///
+/// Note: This is identical to [`TStringFlags`] except that
+/// the implementation of the `prefix` method of the
+/// [`StringFlags`] trait returns a variant of
+/// `AnyStringPrefix::Format`.
 ///
 /// ## Notes on usage
 ///
@@ -950,7 +894,8 @@ bitflags! {
 /// will properly handle nested f-strings. For usage that doesn't fit into one of these categories,
 /// the public constructor [`FStringFlags::empty`] can be used.
 #[derive(Copy, Clone, Eq, PartialEq, Hash)]
-pub struct FStringFlags(FStringFlagsInner);
+#[cfg_attr(feature = "get-size", derive(get_size2::GetSize))]
+pub struct FStringFlags(InterpolatedStringFlagsInner);
 
 impl FStringFlags {
     /// Construct a new [`FStringFlags`] with **no flags set**.
@@ -963,45 +908,160 @@ impl FStringFlags {
     /// situations in which alternative ways to construct this struct should be used, especially
     /// when writing lint rules.
     pub fn empty() -> Self {
-        Self(FStringFlagsInner::empty())
+        Self(InterpolatedStringFlagsInner::empty())
     }
 
     #[must_use]
     pub fn with_quote_style(mut self, quote_style: Quote) -> Self {
-        self.0
-            .set(FStringFlagsInner::DOUBLE, quote_style.is_double());
+        self.0.set(
+            InterpolatedStringFlagsInner::DOUBLE,
+            quote_style.is_double(),
+        );
         self
     }
 
     #[must_use]
     pub fn with_triple_quotes(mut self, triple_quotes: TripleQuotes) -> Self {
-        self.0
-            .set(FStringFlagsInner::TRIPLE_QUOTED, triple_quotes.is_yes());
+        self.0.set(
+            InterpolatedStringFlagsInner::TRIPLE_QUOTED,
+            triple_quotes.is_yes(),
+        );
         self
     }
 
     #[must_use]
     pub fn with_prefix(mut self, prefix: FStringPrefix) -> Self {
         match prefix {
-            FStringPrefix::Regular => {
-                Self(self.0 - FStringFlagsInner::R_PREFIX_LOWER - FStringFlagsInner::R_PREFIX_UPPER)
-            }
+            FStringPrefix::Regular => Self(
+                self.0
+                    - InterpolatedStringFlagsInner::R_PREFIX_LOWER
+                    - InterpolatedStringFlagsInner::R_PREFIX_UPPER,
+            ),
             FStringPrefix::Raw { uppercase_r } => {
-                self.0.set(FStringFlagsInner::R_PREFIX_UPPER, uppercase_r);
-                self.0.set(FStringFlagsInner::R_PREFIX_LOWER, !uppercase_r);
+                self.0
+                    .set(InterpolatedStringFlagsInner::R_PREFIX_UPPER, uppercase_r);
+                self.0
+                    .set(InterpolatedStringFlagsInner::R_PREFIX_LOWER, !uppercase_r);
                 self
             }
         }
     }
 
     pub const fn prefix(self) -> FStringPrefix {
-        if self.0.contains(FStringFlagsInner::R_PREFIX_LOWER) {
-            debug_assert!(!self.0.contains(FStringFlagsInner::R_PREFIX_UPPER));
+        if self
+            .0
+            .contains(InterpolatedStringFlagsInner::R_PREFIX_LOWER)
+        {
+            debug_assert!(
+                !self
+                    .0
+                    .contains(InterpolatedStringFlagsInner::R_PREFIX_UPPER)
+            );
             FStringPrefix::Raw { uppercase_r: false }
-        } else if self.0.contains(FStringFlagsInner::R_PREFIX_UPPER) {
+        } else if self
+            .0
+            .contains(InterpolatedStringFlagsInner::R_PREFIX_UPPER)
+        {
             FStringPrefix::Raw { uppercase_r: true }
         } else {
             FStringPrefix::Regular
+        }
+    }
+}
+
+// TODO(dylan): the documentation about using
+// `Checker::default_tstring_flags` is not yet
+// correct. This method does not yet exist because
+// introducing it would emit a dead code warning
+// until we call it in lint rules.
+/// Flags that can be queried to obtain information
+/// regarding the prefixes and quotes used for an f-string.
+///
+/// Note: This is identical to [`FStringFlags`] except that
+/// the implementation of the `prefix` method of the
+/// [`StringFlags`] trait returns a variant of
+/// `AnyStringPrefix::Template`.
+///
+/// ## Notes on usage
+///
+/// If you're using a `Generator` from the `ruff_python_codegen` crate to generate a lint-rule fix
+/// from an existing t-string literal, consider passing along the [`FString::flags`] field. If you
+/// don't have an existing literal but have a `Checker` from the `ruff_linter` crate available,
+/// consider using `Checker::default_tstring_flags` to create instances of this struct; this method
+/// will properly handle nested t-strings. For usage that doesn't fit into one of these categories,
+/// the public constructor [`TStringFlags::empty`] can be used.
+#[derive(Copy, Clone, Eq, PartialEq, Hash)]
+#[cfg_attr(feature = "get-size", derive(get_size2::GetSize))]
+pub struct TStringFlags(InterpolatedStringFlagsInner);
+
+impl TStringFlags {
+    /// Construct a new [`TStringFlags`] with **no flags set**.
+    ///
+    /// See [`TStringFlags::with_quote_style`], [`TStringFlags::with_triple_quotes`], and
+    /// [`TStringFlags::with_prefix`] for ways of setting the quote style (single or double),
+    /// enabling triple quotes, and adding prefixes (such as `r`), respectively.
+    ///
+    /// See the documentation for [`TStringFlags`] for additional caveats on this constructor, and
+    /// situations in which alternative ways to construct this struct should be used, especially
+    /// when writing lint rules.
+    pub fn empty() -> Self {
+        Self(InterpolatedStringFlagsInner::empty())
+    }
+
+    #[must_use]
+    pub fn with_quote_style(mut self, quote_style: Quote) -> Self {
+        self.0.set(
+            InterpolatedStringFlagsInner::DOUBLE,
+            quote_style.is_double(),
+        );
+        self
+    }
+
+    #[must_use]
+    pub fn with_triple_quotes(mut self, triple_quotes: TripleQuotes) -> Self {
+        self.0.set(
+            InterpolatedStringFlagsInner::TRIPLE_QUOTED,
+            triple_quotes.is_yes(),
+        );
+        self
+    }
+
+    #[must_use]
+    pub fn with_prefix(mut self, prefix: TStringPrefix) -> Self {
+        match prefix {
+            TStringPrefix::Regular => Self(
+                self.0
+                    - InterpolatedStringFlagsInner::R_PREFIX_LOWER
+                    - InterpolatedStringFlagsInner::R_PREFIX_UPPER,
+            ),
+            TStringPrefix::Raw { uppercase_r } => {
+                self.0
+                    .set(InterpolatedStringFlagsInner::R_PREFIX_UPPER, uppercase_r);
+                self.0
+                    .set(InterpolatedStringFlagsInner::R_PREFIX_LOWER, !uppercase_r);
+                self
+            }
+        }
+    }
+
+    pub const fn prefix(self) -> TStringPrefix {
+        if self
+            .0
+            .contains(InterpolatedStringFlagsInner::R_PREFIX_LOWER)
+        {
+            debug_assert!(
+                !self
+                    .0
+                    .contains(InterpolatedStringFlagsInner::R_PREFIX_UPPER)
+            );
+            TStringPrefix::Raw { uppercase_r: false }
+        } else if self
+            .0
+            .contains(InterpolatedStringFlagsInner::R_PREFIX_UPPER)
+        {
+            TStringPrefix::Raw { uppercase_r: true }
+        } else {
+            TStringPrefix::Regular
         }
     }
 }
@@ -1011,7 +1071,7 @@ impl StringFlags for FStringFlags {
     /// it begins and ends with three consecutive quote characters.
     /// For example: `f"""{bar}"""`
     fn triple_quotes(self) -> TripleQuotes {
-        if self.0.contains(FStringFlagsInner::TRIPLE_QUOTED) {
+        if self.0.contains(InterpolatedStringFlagsInner::TRIPLE_QUOTED) {
             TripleQuotes::Yes
         } else {
             TripleQuotes::No
@@ -1023,7 +1083,7 @@ impl StringFlags for FStringFlags {
     /// - `f"{"a"}"` -> `QuoteStyle::Double`
     /// - `f'{"a"}'` -> `QuoteStyle::Single`
     fn quote_style(self) -> Quote {
-        if self.0.contains(FStringFlagsInner::DOUBLE) {
+        if self.0.contains(InterpolatedStringFlagsInner::DOUBLE) {
             Quote::Double
         } else {
             Quote::Single
@@ -1045,17 +1105,59 @@ impl fmt::Debug for FStringFlags {
     }
 }
 
+impl StringFlags for TStringFlags {
+    /// Return `true` if the t-string is triple-quoted, i.e.,
+    /// it begins and ends with three consecutive quote characters.
+    /// For example: `t"""{bar}"""`
+    fn triple_quotes(self) -> TripleQuotes {
+        if self.0.contains(InterpolatedStringFlagsInner::TRIPLE_QUOTED) {
+            TripleQuotes::Yes
+        } else {
+            TripleQuotes::No
+        }
+    }
+
+    /// Return the quoting style (single or double quotes)
+    /// used by the t-string's opener and closer:
+    /// - `t"{"a"}"` -> `QuoteStyle::Double`
+    /// - `t'{"a"}'` -> `QuoteStyle::Single`
+    fn quote_style(self) -> Quote {
+        if self.0.contains(InterpolatedStringFlagsInner::DOUBLE) {
+            Quote::Double
+        } else {
+            Quote::Single
+        }
+    }
+
+    fn prefix(self) -> AnyStringPrefix {
+        AnyStringPrefix::Template(self.prefix())
+    }
+}
+
+impl fmt::Debug for TStringFlags {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TStringFlags")
+            .field("quote_style", &self.quote_style())
+            .field("prefix", &self.prefix())
+            .field("triple_quoted", &self.is_triple_quoted())
+            .finish()
+    }
+}
+
 /// An AST node that represents a single f-string which is part of an [`ExprFString`].
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "get-size", derive(get_size2::GetSize))]
 pub struct FString {
     pub range: TextRange,
-    pub elements: FStringElements,
+    pub node_index: AtomicNodeIndex,
+    pub elements: InterpolatedStringElements,
     pub flags: FStringFlags,
 }
 
 impl From<FString> for Expr {
     fn from(payload: FString) -> Self {
         ExprFString {
+            node_index: payload.node_index.clone(),
             range: payload.range,
             value: FStringValue::single(payload),
         }
@@ -1063,63 +1165,85 @@ impl From<FString> for Expr {
     }
 }
 
-/// A newtype wrapper around a list of [`FStringElement`].
+/// A newtype wrapper around a list of [`InterpolatedStringElement`].
 #[derive(Clone, Default, PartialEq)]
-pub struct FStringElements(Vec<FStringElement>);
+#[cfg_attr(feature = "get-size", derive(get_size2::GetSize))]
+pub struct InterpolatedStringElements(Vec<InterpolatedStringElement>);
 
-impl FStringElements {
-    /// Returns an iterator over all the [`FStringLiteralElement`] nodes contained in this f-string.
-    pub fn literals(&self) -> impl Iterator<Item = &FStringLiteralElement> {
+impl InterpolatedStringElements {
+    /// Returns an iterator over all the [`InterpolatedStringLiteralElement`] nodes contained in this f-string.
+    pub fn literals(&self) -> impl Iterator<Item = &InterpolatedStringLiteralElement> {
         self.iter().filter_map(|element| element.as_literal())
     }
 
-    /// Returns an iterator over all the [`FStringExpressionElement`] nodes contained in this f-string.
-    pub fn expressions(&self) -> impl Iterator<Item = &FStringExpressionElement> {
-        self.iter().filter_map(|element| element.as_expression())
+    /// Returns an iterator over all the [`InterpolatedElement`] nodes contained in this f-string.
+    pub fn interpolations(&self) -> impl Iterator<Item = &InterpolatedElement> {
+        self.iter().filter_map(|element| element.as_interpolation())
     }
 }
 
-impl From<Vec<FStringElement>> for FStringElements {
-    fn from(elements: Vec<FStringElement>) -> Self {
-        FStringElements(elements)
+impl From<Vec<InterpolatedStringElement>> for InterpolatedStringElements {
+    fn from(elements: Vec<InterpolatedStringElement>) -> Self {
+        InterpolatedStringElements(elements)
     }
 }
 
-impl<'a> IntoIterator for &'a FStringElements {
-    type IntoIter = Iter<'a, FStringElement>;
-    type Item = &'a FStringElement;
+impl<'a> IntoIterator for &'a InterpolatedStringElements {
+    type IntoIter = Iter<'a, InterpolatedStringElement>;
+    type Item = &'a InterpolatedStringElement;
 
     fn into_iter(self) -> Self::IntoIter {
         self.iter()
     }
 }
 
-impl<'a> IntoIterator for &'a mut FStringElements {
-    type IntoIter = IterMut<'a, FStringElement>;
-    type Item = &'a mut FStringElement;
+impl<'a> IntoIterator for &'a mut InterpolatedStringElements {
+    type IntoIter = IterMut<'a, InterpolatedStringElement>;
+    type Item = &'a mut InterpolatedStringElement;
 
     fn into_iter(self) -> Self::IntoIter {
         self.iter_mut()
     }
 }
 
-impl Deref for FStringElements {
-    type Target = [FStringElement];
+impl Deref for InterpolatedStringElements {
+    type Target = [InterpolatedStringElement];
 
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
-impl DerefMut for FStringElements {
+impl DerefMut for InterpolatedStringElements {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
 }
 
-impl fmt::Debug for FStringElements {
+impl fmt::Debug for InterpolatedStringElements {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt::Debug::fmt(&self.0, f)
+    }
+}
+
+/// An AST node that represents a single t-string which is part of an [`ExprTString`].
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "get-size", derive(get_size2::GetSize))]
+pub struct TString {
+    pub range: TextRange,
+    pub node_index: AtomicNodeIndex,
+    pub elements: InterpolatedStringElements,
+    pub flags: TStringFlags,
+}
+
+impl From<TString> for Expr {
+    fn from(payload: TString) -> Self {
+        ExprTString {
+            node_index: payload.node_index.clone(),
+            range: payload.range,
+            value: TStringValue::single(payload),
+        }
+        .into()
     }
 }
 
@@ -1136,6 +1260,7 @@ impl ExprStringLiteral {
 
 /// The value representing a [`ExprStringLiteral`].
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "get-size", derive(get_size2::GetSize))]
 pub struct StringLiteralValue {
     inner: StringLiteralValueInner,
 }
@@ -1293,6 +1418,7 @@ impl fmt::Display for StringLiteralValue {
 
 /// An internal representation of [`StringLiteralValue`].
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "get-size", derive(get_size2::GetSize))]
 enum StringLiteralValueInner {
     /// A single string literal i.e., `"foo"`.
     Single(StringLiteral),
@@ -1336,6 +1462,8 @@ bitflags! {
     }
 }
 
+impl get_size2::GetSize for StringLiteralFlagsInner {}
+
 /// Flags that can be queried to obtain information
 /// regarding the prefixes and quotes used for a string literal.
 ///
@@ -1349,6 +1477,7 @@ bitflags! {
 /// handle surrounding f-strings. For usage that doesn't fit into one of these categories, the
 /// public constructor [`StringLiteralFlags::empty`] can be used.
 #[derive(Copy, Clone, Eq, PartialEq, Hash)]
+#[cfg_attr(feature = "get-size", derive(get_size2::GetSize))]
 pub struct StringLiteralFlags(StringLiteralFlagsInner);
 
 impl StringLiteralFlags {
@@ -1417,10 +1546,12 @@ impl StringLiteralFlags {
 
     pub const fn prefix(self) -> StringLiteralPrefix {
         if self.0.contains(StringLiteralFlagsInner::U_PREFIX) {
-            debug_assert!(!self.0.intersects(
-                StringLiteralFlagsInner::R_PREFIX_LOWER
-                    .union(StringLiteralFlagsInner::R_PREFIX_UPPER)
-            ));
+            debug_assert!(
+                !self.0.intersects(
+                    StringLiteralFlagsInner::R_PREFIX_LOWER
+                        .union(StringLiteralFlagsInner::R_PREFIX_UPPER)
+                )
+            );
             StringLiteralPrefix::Unicode
         } else if self.0.contains(StringLiteralFlagsInner::R_PREFIX_LOWER) {
             debug_assert!(!self.0.contains(StringLiteralFlagsInner::R_PREFIX_UPPER));
@@ -1475,8 +1606,10 @@ impl fmt::Debug for StringLiteralFlags {
 /// An AST node that represents a single string literal which is part of an
 /// [`ExprStringLiteral`].
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "get-size", derive(get_size2::GetSize))]
 pub struct StringLiteral {
     pub range: TextRange,
+    pub node_index: AtomicNodeIndex,
     pub value: Box<str>,
     pub flags: StringLiteralFlags,
 }
@@ -1500,6 +1633,7 @@ impl StringLiteral {
         Self {
             range,
             value: "".into(),
+            node_index: AtomicNodeIndex::dummy(),
             flags: StringLiteralFlags::empty().with_invalid(),
         }
     }
@@ -1519,6 +1653,7 @@ impl From<StringLiteral> for Expr {
     fn from(payload: StringLiteral) -> Self {
         ExprStringLiteral {
             range: payload.range,
+            node_index: AtomicNodeIndex::dummy(),
             value: StringLiteralValue::single(payload),
         }
         .into()
@@ -1528,6 +1663,7 @@ impl From<StringLiteral> for Expr {
 /// An internal representation of [`StringLiteral`] that represents an
 /// implicitly concatenated string.
 #[derive(Clone)]
+#[cfg_attr(feature = "get-size", derive(get_size2::GetSize))]
 struct ConcatenatedStringLiteral {
     /// The individual [`StringLiteral`] parts that make up the concatenated string.
     strings: Vec<StringLiteral>,
@@ -1580,6 +1716,7 @@ impl ExprBytesLiteral {
 
 /// The value representing a [`ExprBytesLiteral`].
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "get-size", derive(get_size2::GetSize))]
 pub struct BytesLiteralValue {
     inner: BytesLiteralValueInner,
 }
@@ -1708,6 +1845,7 @@ impl<'a> From<&'a BytesLiteralValue> for Cow<'a, [u8]> {
 
 /// An internal representation of [`BytesLiteralValue`].
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "get-size", derive(get_size2::GetSize))]
 enum BytesLiteralValueInner {
     /// A single-part bytestring literal i.e., `b"foo"`.
     Single(BytesLiteral),
@@ -1742,6 +1880,8 @@ bitflags! {
     }
 }
 
+impl get_size2::GetSize for BytesLiteralFlagsInner {}
+
 /// Flags that can be queried to obtain information
 /// regarding the prefixes and quotes used for a bytes literal.
 ///
@@ -1754,6 +1894,7 @@ bitflags! {
 /// will properly handle surrounding f-strings. For usage that doesn't fit into one of these
 /// categories, the public constructor [`BytesLiteralFlags::empty`] can be used.
 #[derive(Copy, Clone, Eq, PartialEq, Hash)]
+#[cfg_attr(feature = "get-size", derive(get_size2::GetSize))]
 pub struct BytesLiteralFlags(BytesLiteralFlagsInner);
 
 impl BytesLiteralFlags {
@@ -1799,7 +1940,7 @@ impl BytesLiteralFlags {
                 self.0
                     .set(BytesLiteralFlagsInner::R_PREFIX_LOWER, !uppercase_r);
             }
-        };
+        }
         self
     }
 
@@ -1863,8 +2004,10 @@ impl fmt::Debug for BytesLiteralFlags {
 /// An AST node that represents a single bytes literal which is part of an
 /// [`ExprBytesLiteral`].
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "get-size", derive(get_size2::GetSize))]
 pub struct BytesLiteral {
     pub range: TextRange,
+    pub node_index: AtomicNodeIndex,
     pub value: Box<[u8]>,
     pub flags: BytesLiteralFlags,
 }
@@ -1888,6 +2031,7 @@ impl BytesLiteral {
         Self {
             range,
             value: Box::new([]),
+            node_index: AtomicNodeIndex::dummy(),
             flags: BytesLiteralFlags::empty().with_invalid(),
         }
     }
@@ -1897,6 +2041,7 @@ impl From<BytesLiteral> for Expr {
     fn from(payload: BytesLiteral) -> Self {
         ExprBytesLiteral {
             range: payload.range,
+            node_index: AtomicNodeIndex::dummy(),
             value: BytesLiteralValue::single(payload),
         }
         .into()
@@ -1939,18 +2084,23 @@ bitflags! {
         /// but can have no other prefixes.
         const F_PREFIX = 1 << 4;
 
+        /// The string has a `t` or `T` prefix, meaning it is a t-string.
+        /// T-strings can also be raw strings,
+        /// but can have no other prefixes.
+        const T_PREFIX = 1 << 5;
+
         /// The string has an `r` prefix, meaning it is a raw string.
         /// F-strings and byte-strings can be raw,
         /// as can strings with no other prefixes.
         /// U-strings cannot be raw.
-        const R_PREFIX_LOWER = 1 << 5;
+        const R_PREFIX_LOWER = 1 << 6;
 
         /// The string has an `R` prefix, meaning it is a raw string.
         /// The casing of the `r`/`R` has no semantic significance at runtime;
         /// see https://black.readthedocs.io/en/stable/the_black_code_style/current_style.html#r-strings-and-r-strings
         /// for why we track the casing of the `r` prefix,
         /// but not for any other prefix
-        const R_PREFIX_UPPER = 1 << 6;
+        const R_PREFIX_UPPER = 1 << 7;
     }
 }
 
@@ -1988,6 +2138,15 @@ impl AnyStringFlags {
             AnyStringPrefix::Format(FStringPrefix::Raw { uppercase_r: true }) => {
                 AnyStringFlagsInner::F_PREFIX.union(AnyStringFlagsInner::R_PREFIX_UPPER)
             }
+
+            // t-strings
+            AnyStringPrefix::Template(TStringPrefix::Regular) => AnyStringFlagsInner::T_PREFIX,
+            AnyStringPrefix::Template(TStringPrefix::Raw { uppercase_r: false }) => {
+                AnyStringFlagsInner::T_PREFIX.union(AnyStringFlagsInner::R_PREFIX_LOWER)
+            }
+            AnyStringPrefix::Template(TStringPrefix::Raw { uppercase_r: true }) => {
+                AnyStringFlagsInner::T_PREFIX.union(AnyStringFlagsInner::R_PREFIX_UPPER)
+            }
         };
         self
     }
@@ -2011,9 +2170,10 @@ impl AnyStringFlags {
         )
     }
 
-    /// Does the string have an `f` or `F` prefix?
-    pub const fn is_f_string(self) -> bool {
-        self.0.contains(AnyStringFlagsInner::F_PREFIX)
+    /// Does the string have an `f`,`F`,`t`, or `T` prefix?
+    pub const fn is_interpolated_string(self) -> bool {
+        self.0
+            .intersects(AnyStringFlagsInner::F_PREFIX.union(AnyStringFlagsInner::T_PREFIX))
     }
 
     /// Does the string have a `b` or `B` prefix?
@@ -2026,7 +2186,7 @@ impl AnyStringFlags {
         match quotes {
             Quote::Double => self.0 |= AnyStringFlagsInner::DOUBLE,
             Quote::Single => self.0 -= AnyStringFlagsInner::DOUBLE,
-        };
+        }
         self
     }
 
@@ -2068,6 +2228,17 @@ impl StringFlags for AnyStringFlags {
                 return AnyStringPrefix::Format(FStringPrefix::Raw { uppercase_r: true });
             }
             return AnyStringPrefix::Format(FStringPrefix::Regular);
+        }
+
+        // t-strings
+        if flags.contains(AnyStringFlagsInner::T_PREFIX) {
+            if flags.contains(AnyStringFlagsInner::R_PREFIX_LOWER) {
+                return AnyStringPrefix::Template(TStringPrefix::Raw { uppercase_r: false });
+            }
+            if flags.contains(AnyStringFlagsInner::R_PREFIX_UPPER) {
+                return AnyStringPrefix::Template(TStringPrefix::Raw { uppercase_r: true });
+            }
+            return AnyStringPrefix::Template(TStringPrefix::Regular);
         }
 
         // bytestrings
@@ -2149,7 +2320,7 @@ impl From<BytesLiteralFlags> for AnyStringFlags {
 
 impl From<AnyStringFlags> for FStringFlags {
     fn from(value: AnyStringFlags) -> FStringFlags {
-        let AnyStringPrefix::Format(fstring_prefix) = value.prefix() else {
+        let AnyStringPrefix::Format(prefix) = value.prefix() else {
             unreachable!(
                 "Should never attempt to convert {} into an f-string",
                 value.prefix()
@@ -2157,7 +2328,7 @@ impl From<AnyStringFlags> for FStringFlags {
         };
         FStringFlags::empty()
             .with_quote_style(value.quote_style())
-            .with_prefix(fstring_prefix)
+            .with_prefix(prefix)
             .with_triple_quotes(value.triple_quotes())
     }
 }
@@ -2168,7 +2339,29 @@ impl From<FStringFlags> for AnyStringFlags {
     }
 }
 
+impl From<AnyStringFlags> for TStringFlags {
+    fn from(value: AnyStringFlags) -> TStringFlags {
+        let AnyStringPrefix::Template(prefix) = value.prefix() else {
+            unreachable!(
+                "Should never attempt to convert {} into a t-string",
+                value.prefix()
+            )
+        };
+        TStringFlags::empty()
+            .with_quote_style(value.quote_style())
+            .with_prefix(prefix)
+            .with_triple_quotes(value.triple_quotes())
+    }
+}
+
+impl From<TStringFlags> for AnyStringFlags {
+    fn from(value: TStringFlags) -> Self {
+        value.as_any_string_flags()
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, is_macro::Is)]
+#[cfg_attr(feature = "get-size", derive(get_size2::GetSize))]
 pub enum Number {
     Int(int::Int),
     Float(f64),
@@ -2236,6 +2429,7 @@ impl<'a> IntoIterator for &'a ExprTuple {
 
 /// See also [expr_context](https://docs.python.org/3/library/ast.html#ast.expr_context)
 #[derive(Clone, Debug, PartialEq, is_macro::Is, Copy, Hash, Eq)]
+#[cfg_attr(feature = "get-size", derive(get_size2::GetSize))]
 pub enum ExprContext {
     Load,
     Store,
@@ -2245,6 +2439,7 @@ pub enum ExprContext {
 
 /// See also [boolop](https://docs.python.org/3/library/ast.html#ast.BoolOp)
 #[derive(Clone, Debug, PartialEq, is_macro::Is, Copy, Hash, Eq)]
+#[cfg_attr(feature = "get-size", derive(get_size2::GetSize))]
 pub enum BoolOp {
     And,
     Or,
@@ -2267,6 +2462,7 @@ impl fmt::Display for BoolOp {
 
 /// See also [operator](https://docs.python.org/3/library/ast.html#ast.operator)
 #[derive(Clone, Debug, PartialEq, is_macro::Is, Copy, Hash, Eq)]
+#[cfg_attr(feature = "get-size", derive(get_size2::GetSize))]
 pub enum Operator {
     Add,
     Sub,
@@ -2368,6 +2564,7 @@ impl fmt::Display for Operator {
 
 /// See also [unaryop](https://docs.python.org/3/library/ast.html#ast.unaryop)
 #[derive(Clone, Debug, PartialEq, is_macro::Is, Copy, Hash, Eq)]
+#[cfg_attr(feature = "get-size", derive(get_size2::GetSize))]
 pub enum UnaryOp {
     Invert,
     Not,
@@ -2394,6 +2591,7 @@ impl fmt::Display for UnaryOp {
 
 /// See also [cmpop](https://docs.python.org/3/library/ast.html#ast.cmpop)
 #[derive(Clone, Debug, PartialEq, is_macro::Is, Copy, Hash, Eq)]
+#[cfg_attr(feature = "get-size", derive(get_size2::GetSize))]
 pub enum CmpOp {
     Eq,
     NotEq,
@@ -2448,8 +2646,10 @@ impl fmt::Display for CmpOp {
 
 /// See also [comprehension](https://docs.python.org/3/library/ast.html#ast.comprehension)
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "get-size", derive(get_size2::GetSize))]
 pub struct Comprehension {
     pub range: TextRange,
+    pub node_index: AtomicNodeIndex,
     pub target: Expr,
     pub iter: Expr,
     pub ifs: Vec<Expr>,
@@ -2458,8 +2658,10 @@ pub struct Comprehension {
 
 /// See also [ExceptHandler](https://docs.python.org/3/library/ast.html#ast.ExceptHandler)
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "get-size", derive(get_size2::GetSize))]
 pub struct ExceptHandlerExceptHandler {
     pub range: TextRange,
+    pub node_index: AtomicNodeIndex,
     pub type_: Option<Box<Expr>>,
     pub name: Option<Identifier>,
     pub body: Vec<Stmt>,
@@ -2467,8 +2669,10 @@ pub struct ExceptHandlerExceptHandler {
 
 /// See also [arg](https://docs.python.org/3/library/ast.html#ast.arg)
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "get-size", derive(get_size2::GetSize))]
 pub struct Parameter {
     pub range: TextRange,
+    pub node_index: AtomicNodeIndex,
     pub name: Identifier,
     pub annotation: Option<Box<Expr>>,
 }
@@ -2485,32 +2689,40 @@ impl Parameter {
 
 /// See also [keyword](https://docs.python.org/3/library/ast.html#ast.keyword)
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "get-size", derive(get_size2::GetSize))]
 pub struct Keyword {
     pub range: TextRange,
+    pub node_index: AtomicNodeIndex,
     pub arg: Option<Identifier>,
     pub value: Expr,
 }
 
 /// See also [alias](https://docs.python.org/3/library/ast.html#ast.alias)
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "get-size", derive(get_size2::GetSize))]
 pub struct Alias {
     pub range: TextRange,
+    pub node_index: AtomicNodeIndex,
     pub name: Identifier,
     pub asname: Option<Identifier>,
 }
 
 /// See also [withitem](https://docs.python.org/3/library/ast.html#ast.withitem)
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "get-size", derive(get_size2::GetSize))]
 pub struct WithItem {
     pub range: TextRange,
+    pub node_index: AtomicNodeIndex,
     pub context_expr: Expr,
     pub optional_vars: Option<Box<Expr>>,
 }
 
 /// See also [match_case](https://docs.python.org/3/library/ast.html#ast.match_case)
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "get-size", derive(get_size2::GetSize))]
 pub struct MatchCase {
     pub range: TextRange,
+    pub node_index: AtomicNodeIndex,
     pub pattern: Pattern,
     pub guard: Option<Box<Expr>>,
     pub body: Vec<Stmt>,
@@ -2521,12 +2733,36 @@ impl Pattern {
     ///
     /// [irrefutable pattern]: https://peps.python.org/pep-0634/#irrefutable-case-blocks
     pub fn is_irrefutable(&self) -> bool {
+        self.irrefutable_pattern().is_some()
+    }
+
+    /// Return `Some(IrrefutablePattern)` if `self` is irrefutable or `None` otherwise.
+    pub fn irrefutable_pattern(&self) -> Option<IrrefutablePattern> {
         match self {
-            Pattern::MatchAs(PatternMatchAs { pattern: None, .. }) => true,
+            Pattern::MatchAs(PatternMatchAs {
+                pattern,
+                name,
+                range,
+                node_index,
+            }) => match pattern {
+                Some(pattern) => pattern.irrefutable_pattern(),
+                None => match name {
+                    Some(name) => Some(IrrefutablePattern {
+                        kind: IrrefutablePatternKind::Name(name.id.clone()),
+                        range: *range,
+                        node_index: node_index.clone(),
+                    }),
+                    None => Some(IrrefutablePattern {
+                        kind: IrrefutablePatternKind::Wildcard,
+                        range: *range,
+                        node_index: node_index.clone(),
+                    }),
+                },
+            },
             Pattern::MatchOr(PatternMatchOr { patterns, .. }) => {
-                patterns.iter().any(Pattern::is_irrefutable)
+                patterns.iter().find_map(Pattern::irrefutable_pattern)
             }
-            _ => false,
+            _ => None,
         }
     }
 
@@ -2554,31 +2790,52 @@ impl Pattern {
     }
 }
 
+pub struct IrrefutablePattern {
+    pub kind: IrrefutablePatternKind,
+    pub range: TextRange,
+    pub node_index: AtomicNodeIndex,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "get-size", derive(get_size2::GetSize))]
+pub enum IrrefutablePatternKind {
+    Name(Name),
+    Wildcard,
+}
+
 /// See also [MatchValue](https://docs.python.org/3/library/ast.html#ast.MatchValue)
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "get-size", derive(get_size2::GetSize))]
 pub struct PatternMatchValue {
     pub range: TextRange,
+    pub node_index: AtomicNodeIndex,
     pub value: Box<Expr>,
 }
 
 /// See also [MatchSingleton](https://docs.python.org/3/library/ast.html#ast.MatchSingleton)
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "get-size", derive(get_size2::GetSize))]
 pub struct PatternMatchSingleton {
     pub range: TextRange,
+    pub node_index: AtomicNodeIndex,
     pub value: Singleton,
 }
 
 /// See also [MatchSequence](https://docs.python.org/3/library/ast.html#ast.MatchSequence)
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "get-size", derive(get_size2::GetSize))]
 pub struct PatternMatchSequence {
     pub range: TextRange,
+    pub node_index: AtomicNodeIndex,
     pub patterns: Vec<Pattern>,
 }
 
 /// See also [MatchMapping](https://docs.python.org/3/library/ast.html#ast.MatchMapping)
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "get-size", derive(get_size2::GetSize))]
 pub struct PatternMatchMapping {
     pub range: TextRange,
+    pub node_index: AtomicNodeIndex,
     pub keys: Vec<Expr>,
     pub patterns: Vec<Pattern>,
     pub rest: Option<Identifier>,
@@ -2586,8 +2843,10 @@ pub struct PatternMatchMapping {
 
 /// See also [MatchClass](https://docs.python.org/3/library/ast.html#ast.MatchClass)
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "get-size", derive(get_size2::GetSize))]
 pub struct PatternMatchClass {
     pub range: TextRange,
+    pub node_index: AtomicNodeIndex,
     pub cls: Box<Expr>,
     pub arguments: PatternArguments,
 }
@@ -2597,8 +2856,10 @@ pub struct PatternMatchClass {
 ///
 /// Like [`Arguments`], but for [`PatternMatchClass`].
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "get-size", derive(get_size2::GetSize))]
 pub struct PatternArguments {
     pub range: TextRange,
+    pub node_index: AtomicNodeIndex,
     pub patterns: Vec<Pattern>,
     pub keywords: Vec<PatternKeyword>,
 }
@@ -2608,31 +2869,39 @@ pub struct PatternArguments {
 ///
 /// Like [`Keyword`], but for [`PatternMatchClass`].
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "get-size", derive(get_size2::GetSize))]
 pub struct PatternKeyword {
     pub range: TextRange,
+    pub node_index: AtomicNodeIndex,
     pub attr: Identifier,
     pub pattern: Pattern,
 }
 
 /// See also [MatchStar](https://docs.python.org/3/library/ast.html#ast.MatchStar)
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "get-size", derive(get_size2::GetSize))]
 pub struct PatternMatchStar {
     pub range: TextRange,
+    pub node_index: AtomicNodeIndex,
     pub name: Option<Identifier>,
 }
 
 /// See also [MatchAs](https://docs.python.org/3/library/ast.html#ast.MatchAs)
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "get-size", derive(get_size2::GetSize))]
 pub struct PatternMatchAs {
     pub range: TextRange,
+    pub node_index: AtomicNodeIndex,
     pub pattern: Option<Box<Pattern>>,
     pub name: Option<Identifier>,
 }
 
 /// See also [MatchOr](https://docs.python.org/3/library/ast.html#ast.MatchOr)
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "get-size", derive(get_size2::GetSize))]
 pub struct PatternMatchOr {
     pub range: TextRange,
+    pub node_index: AtomicNodeIndex,
     pub patterns: Vec<Pattern>,
 }
 
@@ -2656,8 +2925,10 @@ impl TypeParam {
 
 /// See also [TypeVar](https://docs.python.org/3/library/ast.html#ast.TypeVar)
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "get-size", derive(get_size2::GetSize))]
 pub struct TypeParamTypeVar {
     pub range: TextRange,
+    pub node_index: AtomicNodeIndex,
     pub name: Identifier,
     pub bound: Option<Box<Expr>>,
     pub default: Option<Box<Expr>>,
@@ -2665,24 +2936,30 @@ pub struct TypeParamTypeVar {
 
 /// See also [ParamSpec](https://docs.python.org/3/library/ast.html#ast.ParamSpec)
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "get-size", derive(get_size2::GetSize))]
 pub struct TypeParamParamSpec {
     pub range: TextRange,
+    pub node_index: AtomicNodeIndex,
     pub name: Identifier,
     pub default: Option<Box<Expr>>,
 }
 
 /// See also [TypeVarTuple](https://docs.python.org/3/library/ast.html#ast.TypeVarTuple)
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "get-size", derive(get_size2::GetSize))]
 pub struct TypeParamTypeVarTuple {
     pub range: TextRange,
+    pub node_index: AtomicNodeIndex,
     pub name: Identifier,
     pub default: Option<Box<Expr>>,
 }
 
 /// See also [decorator](https://docs.python.org/3/library/ast.html#ast.decorator)
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "get-size", derive(get_size2::GetSize))]
 pub struct Decorator {
     pub range: TextRange,
+    pub node_index: AtomicNodeIndex,
     pub expression: Expr,
 }
 
@@ -2754,8 +3031,10 @@ impl Ranged for AnyParameterRef<'_> {
 /// NOTE: This type differs from the original Python AST. See: [arguments](https://docs.python.org/3/library/ast.html#ast.arguments).
 
 #[derive(Clone, Debug, PartialEq, Default)]
+#[cfg_attr(feature = "get-size", derive(get_size2::GetSize))]
 pub struct Parameters {
     pub range: TextRange,
+    pub node_index: AtomicNodeIndex,
     pub posonlyargs: Vec<ParameterWithDefault>,
     pub args: Vec<ParameterWithDefault>,
     pub vararg: Option<Box<Parameter>>,
@@ -2790,6 +3069,7 @@ impl Parameters {
     pub fn len(&self) -> usize {
         let Parameters {
             range: _,
+            node_index: _,
             posonlyargs,
             args,
             vararg,
@@ -2838,6 +3118,7 @@ impl<'a> ParametersIterator<'a> {
     fn new(parameters: &'a Parameters) -> Self {
         let Parameters {
             range: _,
+            node_index: _,
             posonlyargs,
             args,
             vararg,
@@ -2970,8 +3251,10 @@ impl<'a> IntoIterator for &'a Box<Parameters> {
 /// NOTE: This type is different from original Python AST.
 
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "get-size", derive(get_size2::GetSize))]
 pub struct ParameterWithDefault {
     pub range: TextRange,
+    pub node_index: AtomicNodeIndex,
     pub parameter: Parameter,
     pub default: Option<Box<Expr>>,
 }
@@ -3013,8 +3296,10 @@ impl ParameterWithDefault {
 /// typically used for `metaclass`, with any additional arguments being passed to the `metaclass`.
 
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "get-size", derive(get_size2::GetSize))]
 pub struct Arguments {
     pub range: TextRange,
+    pub node_index: AtomicNodeIndex,
     pub args: Box<[Expr]>,
     pub keywords: Box<[Keyword]>,
 }
@@ -3090,7 +3375,7 @@ impl Arguments {
         self.find_argument(name, position).map(ArgOrKeyword::value)
     }
 
-    /// Return the the argument with the given name or at the given position, or `None` if no such
+    /// Return the argument with the given name or at the given position, or `None` if no such
     /// argument exists. Used to retrieve arguments that can be provided _either_ as keyword or
     /// positional arguments.
     pub fn find_argument(&self, name: &str, position: usize) -> Option<ArgOrKeyword> {
@@ -3162,8 +3447,10 @@ impl Arguments {
 /// the `T`, `U`, and `V` type parameters in the order they appear in the source code.
 
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "get-size", derive(get_size2::GetSize))]
 pub struct TypeParams {
     pub range: TextRange,
+    pub node_index: AtomicNodeIndex,
     pub type_params: Vec<TypeParam>,
 }
 
@@ -3184,6 +3471,7 @@ pub type Suite = Vec<Stmt>;
 ///
 /// [IPython Syntax]: https://github.com/ipython/ipython/blob/635815e8f1ded5b764d66cacc80bbe25e9e2587f/IPython/core/inputtransformer2.py#L335-L343
 #[derive(PartialEq, Eq, Debug, Clone, Hash, Copy)]
+#[cfg_attr(feature = "get-size", derive(get_size2::GetSize))]
 pub enum IpyEscapeKind {
     /// Send line to underlying system shell (`!`).
     Shell,
@@ -3275,9 +3563,11 @@ impl IpyEscapeKind {
 ///     ...
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "get-size", derive(get_size2::GetSize))]
 pub struct Identifier {
     pub id: Name,
     pub range: TextRange,
+    pub node_index: AtomicNodeIndex,
 }
 
 impl Identifier {
@@ -3285,6 +3575,7 @@ impl Identifier {
     pub fn new(id: impl Into<Name>, range: TextRange) -> Self {
         Self {
             id: id.into(),
+            node_index: AtomicNodeIndex::dummy(),
             range,
         }
     }
@@ -3348,6 +3639,7 @@ impl From<Identifier> for Name {
 }
 
 #[derive(Clone, Copy, Debug, Hash, PartialEq)]
+#[cfg_attr(feature = "get-size", derive(get_size2::GetSize))]
 pub enum Singleton {
     None,
     True,
@@ -3366,56 +3658,50 @@ impl From<bool> for Singleton {
 
 #[cfg(test)]
 mod tests {
-    #[allow(clippy::wildcard_imports)]
-    use super::*;
-
-    use crate::generated::*;
     use crate::Mod;
+    use crate::generated::*;
 
     #[test]
     #[cfg(target_pointer_width = "64")]
     fn size() {
-        assert!(std::mem::size_of::<Stmt>() <= 120);
-        assert!(std::mem::size_of::<StmtFunctionDef>() <= 120);
-        assert!(std::mem::size_of::<StmtClassDef>() <= 104);
-        assert!(std::mem::size_of::<StmtTry>() <= 112);
-        assert!(std::mem::size_of::<Mod>() <= 32);
-        // 96 for Rustc < 1.76
-        assert!(matches!(std::mem::size_of::<Pattern>(), 88 | 96));
-
-        assert_eq!(std::mem::size_of::<Expr>(), 64);
-        assert_eq!(std::mem::size_of::<ExprAttribute>(), 56);
-        assert_eq!(std::mem::size_of::<ExprAwait>(), 16);
+        assert_eq!(std::mem::size_of::<Stmt>(), 128);
+        assert_eq!(std::mem::size_of::<StmtFunctionDef>(), 128);
+        assert_eq!(std::mem::size_of::<StmtClassDef>(), 120);
+        assert_eq!(std::mem::size_of::<StmtTry>(), 112);
+        assert_eq!(std::mem::size_of::<Mod>(), 40);
+        assert_eq!(std::mem::size_of::<Pattern>(), 104);
+        assert_eq!(std::mem::size_of::<Expr>(), 80);
+        assert_eq!(std::mem::size_of::<ExprAttribute>(), 64);
+        assert_eq!(std::mem::size_of::<ExprAwait>(), 24);
         assert_eq!(std::mem::size_of::<ExprBinOp>(), 32);
         assert_eq!(std::mem::size_of::<ExprBoolOp>(), 40);
-        assert_eq!(std::mem::size_of::<ExprBooleanLiteral>(), 12);
-        assert_eq!(std::mem::size_of::<ExprBytesLiteral>(), 40);
-        assert_eq!(std::mem::size_of::<ExprCall>(), 56);
-        assert_eq!(std::mem::size_of::<ExprCompare>(), 48);
-        assert_eq!(std::mem::size_of::<ExprDict>(), 32);
-        assert_eq!(std::mem::size_of::<ExprDictComp>(), 48);
-        assert_eq!(std::mem::size_of::<ExprEllipsisLiteral>(), 8);
-        // 56 for Rustc < 1.76
-        assert!(matches!(std::mem::size_of::<ExprFString>(), 48 | 56));
+        assert_eq!(std::mem::size_of::<ExprBooleanLiteral>(), 16);
+        assert_eq!(std::mem::size_of::<ExprBytesLiteral>(), 48);
+        assert_eq!(std::mem::size_of::<ExprCall>(), 72);
+        assert_eq!(std::mem::size_of::<ExprCompare>(), 56);
+        assert_eq!(std::mem::size_of::<ExprDict>(), 40);
+        assert_eq!(std::mem::size_of::<ExprDictComp>(), 56);
+        assert_eq!(std::mem::size_of::<ExprEllipsisLiteral>(), 12);
+        assert_eq!(std::mem::size_of::<ExprFString>(), 56);
         assert_eq!(std::mem::size_of::<ExprGenerator>(), 48);
-        assert_eq!(std::mem::size_of::<ExprIf>(), 32);
+        assert_eq!(std::mem::size_of::<ExprIf>(), 40);
         assert_eq!(std::mem::size_of::<ExprIpyEscapeCommand>(), 32);
-        assert_eq!(std::mem::size_of::<ExprLambda>(), 24);
+        assert_eq!(std::mem::size_of::<ExprLambda>(), 32);
         assert_eq!(std::mem::size_of::<ExprList>(), 40);
-        assert_eq!(std::mem::size_of::<ExprListComp>(), 40);
+        assert_eq!(std::mem::size_of::<ExprListComp>(), 48);
         assert_eq!(std::mem::size_of::<ExprName>(), 40);
-        assert_eq!(std::mem::size_of::<ExprNamed>(), 24);
-        assert_eq!(std::mem::size_of::<ExprNoneLiteral>(), 8);
-        assert_eq!(std::mem::size_of::<ExprNumberLiteral>(), 32);
-        assert_eq!(std::mem::size_of::<ExprSet>(), 32);
-        assert_eq!(std::mem::size_of::<ExprSetComp>(), 40);
-        assert_eq!(std::mem::size_of::<ExprSlice>(), 32);
+        assert_eq!(std::mem::size_of::<ExprNamed>(), 32);
+        assert_eq!(std::mem::size_of::<ExprNoneLiteral>(), 12);
+        assert_eq!(std::mem::size_of::<ExprNumberLiteral>(), 40);
+        assert_eq!(std::mem::size_of::<ExprSet>(), 40);
+        assert_eq!(std::mem::size_of::<ExprSetComp>(), 48);
+        assert_eq!(std::mem::size_of::<ExprSlice>(), 40);
         assert_eq!(std::mem::size_of::<ExprStarred>(), 24);
-        assert_eq!(std::mem::size_of::<ExprStringLiteral>(), 56);
+        assert_eq!(std::mem::size_of::<ExprStringLiteral>(), 64);
         assert_eq!(std::mem::size_of::<ExprSubscript>(), 32);
         assert_eq!(std::mem::size_of::<ExprTuple>(), 40);
         assert_eq!(std::mem::size_of::<ExprUnaryOp>(), 24);
-        assert_eq!(std::mem::size_of::<ExprYield>(), 16);
-        assert_eq!(std::mem::size_of::<ExprYieldFrom>(), 16);
+        assert_eq!(std::mem::size_of::<ExprYield>(), 24);
+        assert_eq!(std::mem::size_of::<ExprYieldFrom>(), 24);
     }
 }

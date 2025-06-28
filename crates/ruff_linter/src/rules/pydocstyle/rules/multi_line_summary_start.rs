@@ -1,7 +1,6 @@
 use std::borrow::Cow;
 
-use ruff_diagnostics::{AlwaysFixableViolation, Diagnostic, Edit, Fix};
-use ruff_macros::{derive_message_formats, ViolationMetadata};
+use ruff_macros::{ViolationMetadata, derive_message_formats};
 use ruff_python_ast::str::is_triple_quote;
 use ruff_python_semantic::Definition;
 use ruff_source_file::{LineRanges, NewlineWithTrailingNewline, UniversalNewlineIterator};
@@ -10,6 +9,7 @@ use ruff_text_size::{Ranged, TextRange, TextSize};
 use crate::checkers::ast::Checker;
 use crate::docstrings::Docstring;
 use crate::registry::Rule;
+use crate::{AlwaysFixableViolation, Edit, Fix};
 
 /// ## What it does
 /// Checks for docstring summary lines that are not positioned on the first
@@ -146,7 +146,7 @@ pub(crate) fn multi_line_summary_start(checker: &Checker, docstring: &Docstring)
         .is_none()
     {
         return;
-    };
+    }
     let mut content_lines =
         UniversalNewlineIterator::with_offset(docstring.contents(), docstring.start());
 
@@ -155,8 +155,9 @@ pub(crate) fn multi_line_summary_start(checker: &Checker, docstring: &Docstring)
     };
 
     if is_triple_quote(&first_line) {
-        if checker.enabled(Rule::MultiLineSummaryFirstLine) {
-            let mut diagnostic = Diagnostic::new(MultiLineSummaryFirstLine, docstring.range());
+        if checker.is_rule_enabled(Rule::MultiLineSummaryFirstLine) {
+            let mut diagnostic =
+                checker.report_diagnostic(MultiLineSummaryFirstLine, docstring.range());
             // Delete until first non-whitespace char.
             for line in content_lines {
                 if let Some(end_column) = line.find(|c: char| !c.is_whitespace()) {
@@ -167,7 +168,6 @@ pub(crate) fn multi_line_summary_start(checker: &Checker, docstring: &Docstring)
                     break;
                 }
             }
-            checker.report_diagnostic(diagnostic);
         }
     } else if first_line.as_str().ends_with('\\') {
         // Ignore the edge case whether a single quoted string is multiple lines through an
@@ -179,8 +179,9 @@ pub(crate) fn multi_line_summary_start(checker: &Checker, docstring: &Docstring)
         // ```
         return;
     } else {
-        if checker.enabled(Rule::MultiLineSummarySecondLine) {
-            let mut diagnostic = Diagnostic::new(MultiLineSummarySecondLine, docstring.range());
+        if checker.is_rule_enabled(Rule::MultiLineSummarySecondLine) {
+            let mut diagnostic =
+                checker.report_diagnostic(MultiLineSummarySecondLine, docstring.range());
             let mut indentation = Cow::Borrowed(docstring.compute_indentation());
             let mut fixable = true;
             if !indentation.chars().all(char::is_whitespace) {
@@ -201,7 +202,7 @@ pub(crate) fn multi_line_summary_start(checker: &Checker, docstring: &Docstring)
                         indentation.push_str(checker.stylist().indentation());
                         fixable = true;
                     }
-                };
+                }
             }
 
             if fixable {
@@ -223,7 +224,6 @@ pub(crate) fn multi_line_summary_start(checker: &Checker, docstring: &Docstring)
                     first_line.end(),
                 )));
             }
-            checker.report_diagnostic(diagnostic);
         }
     }
 }

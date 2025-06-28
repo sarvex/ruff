@@ -7,9 +7,9 @@ use std::path::Path;
 #[cfg(not(fuzzing))]
 use anyhow::Result;
 use itertools::Itertools;
+use ruff_text_size::Ranged;
 use rustc_hash::FxHashMap;
 
-use ruff_diagnostics::{Applicability, Diagnostic, FixAvailability};
 use ruff_notebook::Notebook;
 #[cfg(not(fuzzing))]
 use ruff_notebook::NotebookError;
@@ -19,18 +19,18 @@ use ruff_python_index::Indexer;
 use ruff_python_parser::{ParseError, ParseOptions};
 use ruff_python_trivia::textwrap::dedent;
 use ruff_source_file::SourceFileBuilder;
-use ruff_text_size::Ranged;
 
-use crate::fix::{fix_file, FixResult};
+use crate::codes::Rule;
+use crate::fix::{FixResult, fix_file};
 use crate::linter::check_path;
-use crate::message::{Emitter, EmitterContext, Message, TextEmitter};
+use crate::message::{Emitter, EmitterContext, OldDiagnostic, TextEmitter};
 use crate::package::PackageRoot;
 use crate::packaging::detect_package_root;
-use crate::registry::AsRule;
 use crate::settings::types::UnsafeFixes;
-use crate::settings::{flags, LinterSettings};
+use crate::settings::{LinterSettings, flags};
 use crate::source_kind::SourceKind;
-use crate::{directives, Locator};
+use crate::{Applicability, FixAvailability};
+use crate::{Locator, directives};
 
 #[cfg(not(fuzzing))]
 pub(crate) fn test_resource_path(path: impl AsRef<Path>) -> std::path::PathBuf {
@@ -39,7 +39,10 @@ pub(crate) fn test_resource_path(path: impl AsRef<Path>) -> std::path::PathBuf {
 
 /// Run [`check_path`] on a Python file in the `resources/test/fixtures` directory.
 #[cfg(not(fuzzing))]
-pub(crate) fn test_path(path: impl AsRef<Path>, settings: &LinterSettings) -> Result<Vec<Message>> {
+pub(crate) fn test_path(
+    path: impl AsRef<Path>,
+    settings: &LinterSettings,
+) -> Result<Vec<OldDiagnostic>> {
     let path = test_resource_path("fixtures").join(path);
     let source_type = PySourceType::from(&path);
     let source_kind = SourceKind::from_path(path.as_ref(), source_type)?.expect("valid source");
@@ -48,7 +51,7 @@ pub(crate) fn test_path(path: impl AsRef<Path>, settings: &LinterSettings) -> Re
 
 #[cfg(not(fuzzing))]
 pub(crate) struct TestedNotebook {
-    pub(crate) messages: Vec<Message>,
+    pub(crate) diagnostics: Vec<OldDiagnostic>,
     pub(crate) source_notebook: Notebook,
     pub(crate) linted_notebook: Notebook,
 }
@@ -61,7 +64,7 @@ pub(crate) fn assert_notebook_path(
 ) -> Result<TestedNotebook, NotebookError> {
     let source_notebook = Notebook::from_path(path.as_ref())?;
 
-    let source_kind = SourceKind::IpyNotebook(source_notebook);
+    let source_kind = SourceKind::ipy_notebook(source_notebook);
     let (messages, transformed) = test_contents(&source_kind, path.as_ref(), settings);
     let expected_notebook = Notebook::from_path(expected.as_ref())?;
     let linted_notebook = transformed.into_owned().expect_ipy_notebook();
@@ -77,14 +80,14 @@ pub(crate) fn assert_notebook_path(
     );
 
     Ok(TestedNotebook {
-        messages,
+        diagnostics: messages,
         source_notebook: source_kind.expect_ipy_notebook(),
         linted_notebook,
     })
 }
 
 /// Run [`check_path`] on a snippet of Python code.
-pub fn test_snippet(contents: &str, settings: &LinterSettings) -> Vec<Message> {
+pub fn test_snippet(contents: &str, settings: &LinterSettings) -> Vec<OldDiagnostic> {
     let path = Path::new("<filename>");
     let contents = dedent(contents);
     test_contents(&SourceKind::Python(contents.into_owned()), path, settings).0
@@ -108,10 +111,11 @@ pub(crate) fn test_contents<'a>(
     source_kind: &'a SourceKind,
     path: &Path,
     settings: &LinterSettings,
-) -> (Vec<Message>, Cow<'a, SourceKind>) {
+) -> (Vec<OldDiagnostic>, Cow<'a, SourceKind>) {
     let source_type = PySourceType::from(path);
     let target_version = settings.resolve_target_version(path);
-    let options = ParseOptions::from(source_type).with_target_version(target_version);
+    let options =
+        ParseOptions::from(source_type).with_target_version(target_version.parser_version());
     let parsed = ruff_python_parser::parse_unchecked(source_kind.source_code(), options.clone())
         .try_into_module()
         .expect("PySourceType always parses into a module");
@@ -124,7 +128,7 @@ pub(crate) fn test_contents<'a>(
         &locator,
         &indexer,
     );
-    let diagnostics = check_path(
+    let messages = check_path(
         path,
         path.parent()
             .and_then(|parent| detect_package_root(parent, &settings.namespace_packages))
@@ -148,25 +152,22 @@ pub(crate) fn test_contents<'a>(
 
     let mut transformed = Cow::Borrowed(source_kind);
 
-    if diagnostics
-        .iter()
-        .any(|diagnostic| diagnostic.fix.is_some())
-    {
-        let mut diagnostics = diagnostics.clone();
+    if messages.iter().any(|message| message.fix().is_some()) {
+        let mut messages = messages.clone();
 
         while let Some(FixResult {
             code: fixed_contents,
             source_map,
             ..
         }) = fix_file(
-            &diagnostics,
+            &messages,
             &Locator::new(transformed.source_code()),
             UnsafeFixes::Enabled,
         ) {
             if iterations < max_iterations() {
                 iterations += 1;
             } else {
-                let output = print_diagnostics(diagnostics, path, &transformed);
+                let output = print_diagnostics(messages, path, &transformed);
 
                 panic!(
                     "Failed to converge after {} iterations. This likely \
@@ -192,7 +193,7 @@ pub(crate) fn test_contents<'a>(
                 &indexer,
             );
 
-            let fixed_diagnostics = check_path(
+            let fixed_messages = check_path(
                 path,
                 None,
                 &locator,
@@ -209,7 +210,7 @@ pub(crate) fn test_contents<'a>(
 
             if parsed.has_invalid_syntax() && !source_has_errors {
                 // Previous fix introduced a syntax error, abort
-                let fixes = print_diagnostics(diagnostics, path, source_kind);
+                let fixes = print_diagnostics(messages, path, source_kind);
                 let syntax_errors =
                     print_syntax_errors(parsed.errors(), path, &locator, &transformed);
 
@@ -224,7 +225,7 @@ Source with applied fixes:
                 );
             }
 
-            diagnostics = fixed_diagnostics;
+            messages = fixed_messages;
         }
     }
 
@@ -234,11 +235,12 @@ Source with applied fixes:
     )
     .finish();
 
-    let messages = diagnostics
+    let messages = messages
         .into_iter()
-        .map(|diagnostic| {
-            let rule = diagnostic.kind.rule();
-            let fixable = diagnostic.fix.as_ref().is_some_and(|fix| {
+        .filter_map(|msg| Some((msg.secondary_code()?.to_string(), msg)))
+        .map(|(code, mut diagnostic)| {
+            let rule = Rule::from_code(&code).unwrap();
+            let fixable = diagnostic.fix().is_some_and(|fix| {
                 matches!(
                     fix.applicability(),
                     Applicability::Safe | Applicability::Unsafe
@@ -271,18 +273,25 @@ Either ensure you always emit a fix or change `Violation::FIX_AVAILABILITY` to e
             }
 
             assert!(
-                !(fixable && diagnostic.kind.suggestion.is_none()),
+                !(fixable && diagnostic.suggestion().is_none()),
                 "Diagnostic emitted by {rule:?} is fixable but \
                 `Violation::fix_title` returns `None`"
             );
 
-            // Not strictly necessary but adds some coverage for this code path
-            let noqa = directives.noqa_line_for.resolve(diagnostic.start());
+            // Not strictly necessary but adds some coverage for this code path by overriding the
+            // noqa offset and the source file
+            let range = diagnostic.range();
+            diagnostic.noqa_offset = Some(directives.noqa_line_for.resolve(range.start()));
+            if let Some(annotation) = diagnostic.diagnostic.primary_annotation_mut() {
+                annotation.set_span(
+                    ruff_db::diagnostic::Span::from(source_code.clone()).with_range(range),
+                );
+            }
 
-            Message::from_diagnostic(diagnostic, source_code.clone(), noqa)
+            diagnostic
         })
         .chain(parsed.errors().iter().map(|parse_error| {
-            Message::from_parse_error(parse_error, &locator, source_code.clone())
+            OldDiagnostic::from_parse_error(parse_error, &locator, source_code.clone())
         }))
         .sorted()
         .collect();
@@ -300,26 +309,8 @@ fn print_syntax_errors(
 
     let messages: Vec<_> = errors
         .iter()
-        .map(|parse_error| Message::from_parse_error(parse_error, locator, source_file.clone()))
-        .collect();
-
-    if let Some(notebook) = source.as_ipy_notebook() {
-        print_jupyter_messages(&messages, path, notebook)
-    } else {
-        print_messages(&messages)
-    }
-}
-
-fn print_diagnostics(diagnostics: Vec<Diagnostic>, path: &Path, source: &SourceKind) -> String {
-    let filename = path.file_name().unwrap().to_string_lossy();
-    let source_file = SourceFileBuilder::new(filename.as_ref(), source.source_code()).finish();
-
-    let messages: Vec<_> = diagnostics
-        .into_iter()
-        .map(|diagnostic| {
-            let noqa_start = diagnostic.start();
-
-            Message::from_diagnostic(diagnostic, source_file.clone(), noqa_start)
+        .map(|parse_error| {
+            OldDiagnostic::from_parse_error(parse_error, locator, source_file.clone())
         })
         .collect();
 
@@ -330,8 +321,23 @@ fn print_diagnostics(diagnostics: Vec<Diagnostic>, path: &Path, source: &SourceK
     }
 }
 
+/// Print the [`Message::Diagnostic`]s in `messages`.
+fn print_diagnostics(
+    mut diagnostics: Vec<OldDiagnostic>,
+    path: &Path,
+    source: &SourceKind,
+) -> String {
+    diagnostics.retain(|msg| !msg.is_syntax_error());
+
+    if let Some(notebook) = source.as_ipy_notebook() {
+        print_jupyter_messages(&diagnostics, path, notebook)
+    } else {
+        print_messages(&diagnostics)
+    }
+}
+
 pub(crate) fn print_jupyter_messages(
-    messages: &[Message],
+    diagnostics: &[OldDiagnostic],
     path: &Path,
     notebook: &Notebook,
 ) -> String {
@@ -344,7 +350,7 @@ pub(crate) fn print_jupyter_messages(
         .with_unsafe_fixes(UnsafeFixes::Enabled)
         .emit(
             &mut output,
-            messages,
+            diagnostics,
             &EmitterContext::new(&FxHashMap::from_iter([(
                 path.file_name().unwrap().to_string_lossy().to_string(),
                 notebook.index().clone(),
@@ -355,7 +361,7 @@ pub(crate) fn print_jupyter_messages(
     String::from_utf8(output).unwrap()
 }
 
-pub(crate) fn print_messages(messages: &[Message]) -> String {
+pub(crate) fn print_messages(diagnostics: &[OldDiagnostic]) -> String {
     let mut output = Vec::new();
 
     TextEmitter::default()
@@ -365,7 +371,7 @@ pub(crate) fn print_messages(messages: &[Message]) -> String {
         .with_unsafe_fixes(UnsafeFixes::Enabled)
         .emit(
             &mut output,
-            messages,
+            diagnostics,
             &EmitterContext::new(&FxHashMap::default()),
         )
         .unwrap();
@@ -374,7 +380,7 @@ pub(crate) fn print_messages(messages: &[Message]) -> String {
 }
 
 #[macro_export]
-macro_rules! assert_messages {
+macro_rules! assert_diagnostics {
     ($value:expr, $path:expr, $notebook:expr) => {{
         insta::with_settings!({ omit_expression => true }, {
             insta::assert_snapshot!(

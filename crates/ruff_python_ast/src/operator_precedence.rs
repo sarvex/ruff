@@ -28,8 +28,10 @@ pub enum OperatorPrecedence {
     /// Precedence of comparisons (`<`, `<=`, `>`, `>=`, `!=`, `==`),
     /// memberships (`in`, `not in`) and identity tests (`is`, `is not`).
     ComparisonsMembershipIdentity,
-    /// Precedence of bitwise `|` and `^` operators.
-    BitXorOr,
+    /// Precedence of bitwise `|` operator.
+    BitOr,
+    /// Precedence of bitwise `^` operator.
+    BitXor,
     /// Precedence of bitwise `&` operator.
     BitAnd,
     /// Precedence of left and right shift expressions (`<<`, `>>`).
@@ -70,7 +72,8 @@ impl OperatorPrecedence {
             | ExprRef::BooleanLiteral(_)
             | ExprRef::NoneLiteral(_)
             | ExprRef::EllipsisLiteral(_)
-            | ExprRef::FString(_) => Self::Atomic,
+            | ExprRef::FString(_)
+            | ExprRef::TString(_) => Self::Atomic,
             // Subscription, slicing, call, attribute reference
             ExprRef::Attribute(_)
             | ExprRef::Subscript(_)
@@ -129,6 +132,12 @@ impl OperatorPrecedence {
     pub fn from_expr(expr: &Expr) -> Self {
         Self::from(&ExprRef::from(expr))
     }
+
+    /// Returns `true` if the precedence is right-associative i.e., the operations are evaluated
+    /// from right to left.
+    pub fn is_right_associative(self) -> bool {
+        matches!(self, OperatorPrecedence::Exponent)
+    }
 }
 
 impl From<&Expr> for OperatorPrecedence {
@@ -159,7 +168,8 @@ impl From<Operator> for OperatorPrecedence {
             Operator::LShift | Operator::RShift => Self::LeftRightShift,
             // Bitwise operations: &, ^, |
             Operator::BitAnd => Self::BitAnd,
-            Operator::BitXor | Operator::BitOr => Self::BitXorOr,
+            Operator::BitXor => Self::BitXor,
+            Operator::BitOr => Self::BitOr,
             // Exponentiation **
             Operator::Pow => Self::Exponent,
         }
@@ -171,6 +181,15 @@ impl From<BoolOp> for OperatorPrecedence {
         match operator {
             BoolOp::And => Self::And,
             BoolOp::Or => Self::Or,
+        }
+    }
+}
+
+impl From<UnaryOp> for OperatorPrecedence {
+    fn from(unary_op: UnaryOp) -> Self {
+        match unary_op {
+            UnaryOp::UAdd | UnaryOp::USub | UnaryOp::Invert => Self::PosNegBitNot,
+            UnaryOp::Not => Self::Not,
         }
     }
 }

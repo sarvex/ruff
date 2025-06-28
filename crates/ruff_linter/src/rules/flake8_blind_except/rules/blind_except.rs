@@ -1,12 +1,12 @@
-use ruff_diagnostics::{Diagnostic, Violation};
-use ruff_macros::{derive_message_formats, ViolationMetadata};
+use ruff_macros::{ViolationMetadata, derive_message_formats};
 use ruff_python_ast::helpers::is_const_true;
-use ruff_python_ast::statement_visitor::{walk_stmt, StatementVisitor};
+use ruff_python_ast::statement_visitor::{StatementVisitor, walk_stmt};
 use ruff_python_ast::{self as ast, Expr, Stmt};
-use ruff_python_semantic::analyze::logging;
 use ruff_python_semantic::SemanticModel;
+use ruff_python_semantic::analyze::logging;
 use ruff_text_size::Ranged;
 
+use crate::Violation;
 use crate::checkers::ast::Checker;
 
 /// ## What it does
@@ -101,18 +101,18 @@ pub(crate) fn blind_except(
     }
 
     // If the exception is logged, don't flag an error.
-    let mut visitor = LogExceptionVisitor::new(semantic, &checker.settings.logger_objects);
+    let mut visitor = LogExceptionVisitor::new(semantic, &checker.settings().logger_objects);
     visitor.visit_body(body);
     if visitor.seen() {
         return;
     }
 
-    checker.report_diagnostic(Diagnostic::new(
+    checker.report_diagnostic(
         BlindExcept {
             name: builtin_exception_type.to_string(),
         },
         type_.range(),
-    ));
+    );
 }
 
 /// A visitor to detect whether the exception with the given name was re-raised.

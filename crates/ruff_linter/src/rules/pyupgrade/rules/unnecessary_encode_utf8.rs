@@ -1,12 +1,14 @@
-use ruff_diagnostics::{AlwaysFixableViolation, Diagnostic, Edit, Fix};
-use ruff_macros::{derive_message_formats, ViolationMetadata};
+use std::fmt::Write as _;
+
+use ruff_macros::{ViolationMetadata, derive_message_formats};
 use ruff_python_ast::{self as ast, Arguments, Expr, Keyword};
 use ruff_python_parser::{TokenKind, Tokens};
 use ruff_text_size::{Ranged, TextRange};
 
-use crate::checkers::ast::Checker;
-use crate::fix::edits::{pad, remove_argument, Parentheses};
 use crate::Locator;
+use crate::checkers::ast::Checker;
+use crate::fix::edits::{Parentheses, pad, remove_argument};
+use crate::{AlwaysFixableViolation, Edit, Fix};
 
 /// ## What it does
 /// Checks for unnecessary calls to `encode` as UTF-8.
@@ -129,10 +131,11 @@ fn replace_with_bytes_literal(locator: &Locator, call: &ast::ExprCall, tokens: &
             TokenKind::String => {
                 replacement.push_str(locator.slice(TextRange::new(prev, token.start())));
                 let string = locator.slice(token);
-                replacement.push_str(&format!(
+                let _ = write!(
+                    &mut replacement,
                     "b{}",
                     &string.trim_start_matches('u').trim_start_matches('U')
-                ));
+                );
             }
             _ => {
                 replacement.push_str(locator.slice(TextRange::new(prev, token.end())));
@@ -158,7 +161,7 @@ pub(crate) fn unnecessary_encode_utf8(checker: &Checker, call: &ast::ExprCall) {
             if let Some(encoding_arg) = match_encoding_arg(&call.arguments) {
                 if literal.to_str().is_ascii() {
                     // Ex) Convert `"foo".encode()` to `b"foo"`.
-                    let mut diagnostic = Diagnostic::new(
+                    let mut diagnostic = checker.report_diagnostic(
                         UnnecessaryEncodeUTF8 {
                             reason: Reason::BytesLiteral,
                         },
@@ -169,11 +172,10 @@ pub(crate) fn unnecessary_encode_utf8(checker: &Checker, call: &ast::ExprCall) {
                         call,
                         checker.tokens(),
                     ));
-                    checker.report_diagnostic(diagnostic);
                 } else if let EncodingArg::Keyword(kwarg) = encoding_arg {
                     // Ex) Convert `"unicode text©".encode(encoding="utf-8")` to
                     // `"unicode text©".encode()`.
-                    let mut diagnostic = Diagnostic::new(
+                    let mut diagnostic = checker.report_diagnostic(
                         UnnecessaryEncodeUTF8 {
                             reason: Reason::DefaultArgument,
                         },
@@ -185,13 +187,13 @@ pub(crate) fn unnecessary_encode_utf8(checker: &Checker, call: &ast::ExprCall) {
                             &call.arguments,
                             Parentheses::Preserve,
                             checker.locator().contents(),
+                            checker.comment_ranges(),
                         )
                         .map(Fix::safe_edit)
                     });
-                    checker.report_diagnostic(diagnostic);
                 } else if let EncodingArg::Positional(arg) = encoding_arg {
                     // Ex) Convert `"unicode text©".encode("utf-8")` to `"unicode text©".encode()`.
-                    let mut diagnostic = Diagnostic::new(
+                    let mut diagnostic = checker.report_diagnostic(
                         UnnecessaryEncodeUTF8 {
                             reason: Reason::DefaultArgument,
                         },
@@ -203,10 +205,10 @@ pub(crate) fn unnecessary_encode_utf8(checker: &Checker, call: &ast::ExprCall) {
                             &call.arguments,
                             Parentheses::Preserve,
                             checker.locator().contents(),
+                            checker.comment_ranges(),
                         )
                         .map(Fix::safe_edit)
                     });
-                    checker.report_diagnostic(diagnostic);
                 }
             }
         }
@@ -216,7 +218,7 @@ pub(crate) fn unnecessary_encode_utf8(checker: &Checker, call: &ast::ExprCall) {
                 if let EncodingArg::Keyword(kwarg) = encoding_arg {
                     // Ex) Convert `f"unicode text©".encode(encoding="utf-8")` to
                     // `f"unicode text©".encode()`.
-                    let mut diagnostic = Diagnostic::new(
+                    let mut diagnostic = checker.report_diagnostic(
                         UnnecessaryEncodeUTF8 {
                             reason: Reason::DefaultArgument,
                         },
@@ -228,13 +230,13 @@ pub(crate) fn unnecessary_encode_utf8(checker: &Checker, call: &ast::ExprCall) {
                             &call.arguments,
                             Parentheses::Preserve,
                             checker.locator().contents(),
+                            checker.comment_ranges(),
                         )
                         .map(Fix::safe_edit)
                     });
-                    checker.report_diagnostic(diagnostic);
                 } else if let EncodingArg::Positional(arg) = encoding_arg {
                     // Ex) Convert `f"unicode text©".encode("utf-8")` to `f"unicode text©".encode()`.
-                    let mut diagnostic = Diagnostic::new(
+                    let mut diagnostic = checker.report_diagnostic(
                         UnnecessaryEncodeUTF8 {
                             reason: Reason::DefaultArgument,
                         },
@@ -246,10 +248,10 @@ pub(crate) fn unnecessary_encode_utf8(checker: &Checker, call: &ast::ExprCall) {
                             &call.arguments,
                             Parentheses::Preserve,
                             checker.locator().contents(),
+                            checker.comment_ranges(),
                         )
                         .map(Fix::safe_edit)
                     });
-                    checker.report_diagnostic(diagnostic);
                 }
             }
         }
